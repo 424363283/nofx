@@ -27,7 +27,7 @@ var tokenBlacklist = struct {
 const maxBlacklistEntries = 100_000
 
 // OTPIssuer OTP发行者名称
-const OTPIssuer = "nofxAI"
+const OTPIssuer = "TradingDesk"
 
 // SetJWTSecret 设置JWT密钥
 func SetJWTSecret(secret string) {
@@ -125,7 +125,7 @@ func GenerateJWT(userID, email string) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)), // 24小时过期
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "nofxAI",
+			Issuer:    "TradingDesk",
 		},
 	}
 

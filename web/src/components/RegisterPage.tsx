@@ -1,3 +1,6 @@
+import { UiCard } from './design/Controls'
+import { UiForm, UiInput, UiButton } from './design/Controls'
+import { QRCodeSVG } from 'qrcode.react'
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -6,7 +9,7 @@ import { getSystemConfig } from '../lib/config'
 import HeaderBar from './landing/HeaderBar'
 
 export function RegisterPage() {
-  const { language } = useLanguage()
+  const { language, setLanguage } = useLanguage()
   const { register, completeRegistration } = useAuth()
   const [step, setStep] = useState<'register' | 'setup-otp' | 'verify-otp'>(
     'register'
@@ -96,36 +99,32 @@ export function RegisterPage() {
     <div className="min-h-screen" style={{ background: 'var(--brand-black)' }}>
       <HeaderBar
         isLoggedIn={false}
-        isHomePage={false}
         currentPage="register"
         language={language}
-        onLanguageChange={() => {}}
-        onPageChange={(page) => {
-          console.log('RegisterPage onPageChange called with:', page)
-          if (page === 'competition') {
-            window.location.href = '/competition'
-          }
-        }}
+        onLanguageChange={setLanguage}
       />
 
-      <div
-        className="flex items-center justify-center pt-20"
-        style={{ minHeight: 'calc(100vh - 80px)' }}
-      >
-        <div className="w-full max-w-md">
+      <div id="main-content" className="desk-auth">
+        <div className="desk-auth-card ant-desk-auth">
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
               <img
-                src="/icons/nofx.svg"
-                alt="NoFx Logo"
+                src="/icons/trading-desk.svg"
+                alt="观澜 Logo"
                 className="w-16 h-16 object-contain"
               />
             </div>
-            <h1 className="text-2xl font-bold" style={{ color: '#EAECEF' }}>
+            <h1
+              className="text-2xl font-bold"
+              style={{ color: 'var(--foreground)' }}
+            >
               {t('appTitle', language)}
             </h1>
-            <p className="text-sm mt-2" style={{ color: '#848E9C' }}>
+            <p
+              className="text-sm mt-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               {step === 'register' && t('registerTitle', language)}
               {step === 'setup-otp' && t('setupTwoFactor', language)}
               {step === 'verify-otp' && t('verifyOTP', language)}
@@ -133,7 +132,7 @@ export function RegisterPage() {
           </div>
 
           {/* Registration Form */}
-          <div
+          <UiCard
             className="rounded-lg p-6"
             style={{
               background: 'var(--panel-bg)',
@@ -141,15 +140,17 @@ export function RegisterPage() {
             }}
           >
             {step === 'register' && (
-              <form onSubmit={handleRegister} className="space-y-4">
+              <UiForm onSubmit={handleRegister} className="space-y-4">
                 <div>
                   <label
+                    htmlFor="registerpage-1"
                     className="block text-sm font-semibold mb-2"
                     style={{ color: 'var(--brand-light-gray)' }}
                   >
                     {t('email', language)}
                   </label>
-                  <input
+                  <UiInput
+                    id="registerpage-1"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -166,12 +167,14 @@ export function RegisterPage() {
 
                 <div>
                   <label
+                    htmlFor="registerpage-2"
                     className="block text-sm font-semibold mb-2"
                     style={{ color: 'var(--brand-light-gray)' }}
                   >
                     {t('password', language)}
                   </label>
-                  <input
+                  <UiInput
+                    id="registerpage-2"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -188,12 +191,14 @@ export function RegisterPage() {
 
                 <div>
                   <label
+                    htmlFor="registerpage-3"
                     className="block text-sm font-semibold mb-2"
                     style={{ color: 'var(--brand-light-gray)' }}
                   >
                     {t('confirmPassword', language)}
                   </label>
-                  <input
+                  <UiInput
+                    id="registerpage-3"
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
@@ -211,12 +216,14 @@ export function RegisterPage() {
                 {betaMode && (
                   <div>
                     <label
+                      htmlFor="registerpage-4"
                       className="block text-sm font-semibold mb-2"
-                      style={{ color: '#EAECEF' }}
+                      style={{ color: 'var(--foreground)' }}
                     >
                       内测码 *
                     </label>
-                    <input
+                    <UiInput
+                      id="registerpage-4"
                       type="text"
                       value={betaCode}
                       onChange={(e) =>
@@ -228,15 +235,18 @@ export function RegisterPage() {
                       }
                       className="w-full px-3 py-2 rounded font-mono"
                       style={{
-                        background: '#0B0E11',
-                        border: '1px solid #2B3139',
-                        color: '#EAECEF',
+                        background: 'var(--background)',
+                        border: '1px solid var(--panel-border)',
+                        color: 'var(--foreground)',
                       }}
                       placeholder="请输入6位内测码"
                       maxLength={6}
                       required={betaMode}
                     />
-                    <p className="text-xs mt-1" style={{ color: '#848E9C' }}>
+                    <p
+                      className="text-xs mt-1"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
                       内测码由6位字母数字组成，区分大小写
                     </p>
                   </div>
@@ -254,10 +264,10 @@ export function RegisterPage() {
                   </div>
                 )}
 
-                <button
+                <UiButton
                   type="submit"
                   disabled={loading || (betaMode && !betaCode.trim())}
-                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50"
+                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all  disabled:opacity-50"
                   style={{
                     background: 'var(--brand-yellow)',
                     color: 'var(--brand-black)',
@@ -266,8 +276,8 @@ export function RegisterPage() {
                   {loading
                     ? t('loading', language)
                     : t('registerButton', language)}
-                </button>
-              </form>
+                </UiButton>
+              </UiForm>
             )}
 
             {step === 'setup-otp' && (
@@ -276,11 +286,14 @@ export function RegisterPage() {
                   <div className="text-4xl mb-2">📱</div>
                   <h3
                     className="text-lg font-semibold mb-2"
-                    style={{ color: '#EAECEF' }}
+                    style={{ color: 'var(--foreground)' }}
                   >
                     {t('setupTwoFactor', language)}
                   </h3>
-                  <p className="text-sm" style={{ color: '#848E9C' }}>
+                  <p
+                    className="text-sm"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
                     {t('setupTwoFactorDesc', language)}
                   </p>
                 </div>
@@ -320,7 +333,10 @@ export function RegisterPage() {
                     >
                       {t('authStep2Title', language)}
                     </p>
-                    <p className="text-xs mb-2" style={{ color: '#848E9C' }}>
+                    <p
+                      className="text-xs mb-2"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
                       {t('authStep2Desc', language)}
                     </p>
 
@@ -328,14 +344,15 @@ export function RegisterPage() {
                       <div className="mt-2">
                         <p
                           className="text-xs mb-2"
-                          style={{ color: '#848E9C' }}
+                          style={{ color: 'var(--text-secondary)' }}
                         >
                           {t('qrCodeHint', language)}
                         </p>
                         <div className="bg-white p-2 rounded text-center">
-                          <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrCodeURL)}`}
-                            alt="QR Code"
+                          <QRCodeSVG
+                            value={qrCodeURL}
+                            size={150}
+                            title="验证器二维码"
                             className="mx-auto"
                           />
                         </div>
@@ -343,7 +360,10 @@ export function RegisterPage() {
                     )}
 
                     <div className="mt-2">
-                      <p className="text-xs mb-1" style={{ color: '#848E9C' }}>
+                      <p
+                        className="text-xs mb-1"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
                         {t('otpSecret', language)}
                       </p>
                       <div className="flex items-center gap-2">
@@ -356,7 +376,7 @@ export function RegisterPage() {
                         >
                           {otpSecret}
                         </code>
-                        <button
+                        <UiButton
                           onClick={() => copyToClipboard(otpSecret)}
                           className="px-2 py-1 text-xs rounded"
                           style={{
@@ -365,7 +385,7 @@ export function RegisterPage() {
                           }}
                         >
                           {t('copy', language)}
-                        </button>
+                        </UiButton>
                       </div>
                     </div>
                   </div>
@@ -392,21 +412,24 @@ export function RegisterPage() {
                   </div>
                 </div>
 
-                <button
+                <UiButton
                   onClick={handleSetupComplete}
-                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all hover:scale-105"
-                  style={{ background: '#F0B90B', color: '#000' }}
+                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all "
+                  style={{ background: 'var(--binance-yellow)', color: '#000' }}
                 >
                   {t('setupCompleteContinue', language)}
-                </button>
+                </UiButton>
               </div>
             )}
 
             {step === 'verify-otp' && (
-              <form onSubmit={handleOTPVerify} className="space-y-4">
+              <UiForm onSubmit={handleOTPVerify} className="space-y-4">
                 <div className="text-center mb-4">
                   <div className="text-4xl mb-2">🔐</div>
-                  <p className="text-sm" style={{ color: '#848E9C' }}>
+                  <p
+                    className="text-sm"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
                     {t('enterOTPCode', language)}
                     <br />
                     {t('completeRegistrationSubtitle', language)}
@@ -415,12 +438,14 @@ export function RegisterPage() {
 
                 <div>
                   <label
+                    htmlFor="registerpage-5"
                     className="block text-sm font-semibold mb-2"
                     style={{ color: 'var(--brand-light-gray)' }}
                   >
                     {t('otpCode', language)}
                   </label>
-                  <input
+                  <UiInput
+                    id="registerpage-5"
                     type="text"
                     value={otpCode}
                     onChange={(e) =>
@@ -451,7 +476,7 @@ export function RegisterPage() {
                 )}
 
                 <div className="flex gap-3">
-                  <button
+                  <UiButton
                     type="button"
                     onClick={() => setStep('setup-otp')}
                     className="flex-1 px-4 py-2 rounded text-sm font-semibold"
@@ -461,28 +486,31 @@ export function RegisterPage() {
                     }}
                   >
                     {t('back', language)}
-                  </button>
-                  <button
+                  </UiButton>
+                  <UiButton
                     type="submit"
                     disabled={loading || otpCode.length !== 6}
-                    className="flex-1 px-4 py-2 rounded text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50"
-                    style={{ background: '#F0B90B', color: '#000' }}
+                    className="flex-1 px-4 py-2 rounded text-sm font-semibold transition-all  disabled:opacity-50"
+                    style={{
+                      background: 'var(--binance-yellow)',
+                      color: '#000',
+                    }}
                   >
                     {loading
                       ? t('loading', language)
                       : t('completeRegistration', language)}
-                  </button>
+                  </UiButton>
                 </div>
-              </form>
+              </UiForm>
             )}
-          </div>
+          </UiCard>
 
           {/* Login Link */}
           {step === 'register' && (
             <div className="text-center mt-6">
               <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                 已有账户？{' '}
-                <button
+                <UiButton
                   onClick={() => {
                     window.history.pushState({}, '', '/login')
                     window.dispatchEvent(new PopStateEvent('popstate'))
@@ -491,7 +519,7 @@ export function RegisterPage() {
                   style={{ color: 'var(--brand-yellow)' }}
                 >
                   立即登录
-                </button>
+                </UiButton>
               </p>
             </div>
           )}

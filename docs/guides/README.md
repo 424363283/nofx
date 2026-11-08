@@ -1,8 +1,8 @@
-# 📘 NOFX User Guides
+# 📘 GUANLAN User Guides
 
 **Language:** [English](README.md) | [中文](README.zh-CN.md)
 
-Comprehensive guides to help you use NOFX effectively.
+Comprehensive guides to help you use GUANLAN effectively.
 
 ---
 
@@ -129,9 +129,9 @@ Run multiple AI models simultaneously:
 ## 🆘 Need Help?
 
 **Can't find what you need?**
-- 💬 [Telegram Community](https://t.me/nofx_dev_community)
-- 🐛 [GitHub Issues](https://github.com/tinkle-community/nofx/issues)
-- 🐦 [Twitter @nofx_ai](https://x.com/nofx_ai)
+- 💬 [Telegram Community](#)
+- 🐛 [GitHub Issues](#)
+- 🐦 [Twitter @guanlan_ai](#)
 
 ---
 

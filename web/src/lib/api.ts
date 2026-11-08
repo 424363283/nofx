@@ -2,6 +2,8 @@ import type {
   SystemStatus,
   AccountInfo,
   Position,
+  PositionSnapshot,
+  TradingHistory,
   DecisionRecord,
   Statistics,
   TraderInfo,
@@ -31,6 +33,30 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 export const api = {
+  async getTradingHistory(traderId: string, days: number, refresh = false): Promise<TradingHistory> {
+    const response = await fetch(`${API_BASE}/traders/${encodeURIComponent(traderId)}/history?days=${days}${refresh ? '&refresh=1' : ''}`, { headers: getAuthHeaders(), cache: 'no-store' })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) throw new Error(body?.error || `历史订单读取失败（HTTP ${response.status}）`)
+    if (!body) throw new Error('历史订单数据格式无效')
+    return body
+  },
+  async getRadarPool(traderId: string) {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/radar-pool`, {
+      headers: getAuthHeaders(),
+    })
+    if (!res.ok) throw new Error('异动候选池加载失败')
+    return res.json()
+  },
+  async setRadarPool(traderId: string, enabled: boolean) {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/radar-pool`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ enabled }),
+    })
+    const body = await res.json()
+    if (!res.ok) throw new Error(body.error || '保存失败')
+    return body
+  },
   // AI交易员管理接口
   async getTraders(): Promise<TraderInfo[]> {
     const res = await fetch(`${API_BASE}/my-traders`, {
@@ -53,7 +79,10 @@ export const api = {
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
     })
-    if (!res.ok) throw new Error('创建交易员失败')
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      throw new Error(body?.error || `创建交易员失败（HTTP ${res.status}）`)
+    }
     return res.json()
   },
 
@@ -110,7 +139,10 @@ export const api = {
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
     })
-    if (!res.ok) throw new Error('更新交易员失败')
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      throw new Error(body?.error || `更新交易员失败（HTTP ${res.status}）`)
+    }
     return res.json()
   },
 
@@ -157,8 +189,14 @@ export const api = {
     if (!res.ok) throw new Error('更新模型配置失败')
   },
 
-
   // 交易所配置接口
+  async getExchangeCredentials(id: string): Promise<Exchange> {
+    const res = await fetch(`${API_BASE}/exchanges/${encodeURIComponent(id)}/credentials`, {
+      headers: getAuthHeaders(), cache: 'no-store',
+    })
+    if (!res.ok) throw new Error('已保存的交易所凭证加载失败，请关闭弹窗后重试')
+    return res.json()
+  },
   async getExchangeConfigs(): Promise<Exchange[]> {
     const res = await fetch(`${API_BASE}/exchanges`, {
       headers: getAuthHeaders(),
@@ -247,14 +285,25 @@ export const api = {
 
   // 获取持仓列表（支持trader_id）
   async getPositions(traderId?: string): Promise<Position[]> {
+    return (await api.getPositionsSnapshot(traderId)).positions
+  },
+
+  async getPositionsSnapshot(traderId?: string): Promise<PositionSnapshot> {
     const url = traderId
       ? `${API_BASE}/positions?trader_id=${traderId}`
       : `${API_BASE}/positions`
     const res = await fetch(url, {
+      cache: 'no-store',
       headers: getAuthHeaders(),
     })
-    if (!res.ok) throw new Error('获取持仓列表失败')
-    return res.json()
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      throw new Error(body?.error || '获取持仓列表失败')
+    }
+    const positions = (await res.json()) ?? []
+    if (!Array.isArray(positions)) throw new Error('持仓数据格式无效')
+    const observedAt = Number(res.headers.get('X-Positions-As-Of'))
+    return { positions, asOf: Number.isFinite(observedAt) && observedAt > 0 ? observedAt : Date.now() }
   },
 
   // 获取决策日志（支持trader_id）

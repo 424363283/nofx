@@ -3,8 +3,8 @@ const path = require('path');
 module.exports = {
   apps: [
     {
-      name: 'nofx-backend',
-      script: './nofx',
+      name: 'guanlan-backend',
+      script: './guanlan',
       cwd: __dirname, // 使用当前目录（配置文件所在目录）
       interpreter: 'none', // 不使用解释器，直接执行二进制文件
       instances: 1,
@@ -20,7 +20,7 @@ module.exports = {
       merge_logs: true
     },
     {
-      name: 'nofx-frontend',
+      name: 'guanlan-frontend',
       script: 'npm',
       args: 'run dev',
       cwd: path.join(__dirname, 'web'), // 动态拼接 web 目录

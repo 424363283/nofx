@@ -21,7 +21,7 @@ const BinanceIcon: React.FC<IconProps> = ({
   >
     <path
       d="M79.5 176l-39.7 39.7L0 176l39.7-39.7zM176 79.5l68.1 68.1 39.7-39.7L176 0 68.1 107.9l39.7 39.7zm136.2 56.8L272.5 176l39.7 39.7 39.7-39.7zM176 272.5l-68.1-68.1-39.7 39.7L176 352l107.8-107.9-39.7-39.7zm0-56.8l39.7-39.7-39.7-39.7-39.8 39.7z"
-      fill="#f0b90b"
+      fill="var(--binance-yellow)"
     />
   </svg>
 )
@@ -162,13 +162,13 @@ export const getExchangeIcon = (
             width: props.width || 24,
             height: props.height || 24,
             borderRadius: '50%',
-            background: '#2B3139',
+            background: 'var(--panel-border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: '12px',
             fontWeight: 'bold',
-            color: '#EAECEF',
+            color: 'var(--foreground)',
           }}
         >
           {type[0]?.toUpperCase() || '?'}

@@ -1,3 +1,7 @@
+import { uiText } from '../i18n/uiText'
+import { useLanguage } from '../contexts/LanguageContext'
+import { UiCard } from './design/Controls'
+import { UiButton, UiDialog } from './design/Controls'
 import { useState } from 'react'
 import type { TraderConfigData } from '../types'
 
@@ -18,6 +22,7 @@ export function TraderConfigViewModal({
   onClose,
   traderData,
 }: TraderConfigViewModalProps) {
+  const { language } = useLanguage()
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
   if (!isOpen || !traderData) return null
@@ -39,20 +44,25 @@ export function TraderConfigViewModal({
     text: string
     fieldName: string
   }) => (
-    <button
+    <UiButton
       onClick={() => copyToClipboard(text, fieldName)}
-      className="ml-2 px-2 py-1 text-xs rounded transition-all duration-200 hover:scale-105"
+      className="ml-2 px-2 py-1 text-xs rounded transition-all duration-200 "
       style={{
         background:
           copiedField === fieldName
             ? 'rgba(14, 203, 129, 0.1)'
-            : 'rgba(240, 185, 11, 0.1)',
-        color: copiedField === fieldName ? '#0ECB81' : '#F0B90B',
-        border: `1px solid ${copiedField === fieldName ? 'rgba(14, 203, 129, 0.3)' : 'rgba(240, 185, 11, 0.3)'}`,
+            : 'rgba(52, 211, 153, 0.1)',
+        color:
+          copiedField === fieldName
+            ? 'var(--binance-green)'
+            : 'var(--binance-yellow)',
+        border: `1px solid ${copiedField === fieldName ? 'rgba(14, 203, 129, 0.3)' : 'rgba(52, 211, 153, 0.3)'}`,
       }}
     >
-      {copiedField === fieldName ? '✓ 已复制' : '📋 复制'}
-    </button>
+      {copiedField === fieldName
+        ? uiText('✓ 已复制', language)
+        : uiText('📋 复制', language)}
+    </UiButton>
   )
 
   const InfoRow = ({
@@ -66,11 +76,17 @@ export function TraderConfigViewModal({
     copyable?: boolean
     fieldName?: string
   }) => (
-    <div className="flex justify-between items-start py-2 border-b border-[#2B3139] last:border-b-0">
-      <span className="text-sm text-[#848E9C] font-medium">{label}</span>
+    <div className="flex justify-between items-start py-2 border-b border-[var(--panel-border)] last:border-b-0">
+      <span className="text-sm text-[var(--text-secondary)] font-medium">
+        {label}
+      </span>
       <div className="flex items-center text-right">
-        <span className="text-sm text-[#EAECEF] font-mono">
-          {typeof value === 'boolean' ? (value ? '是' : '否') : value}
+        <span className="text-sm text-[var(--foreground)] font-mono">
+          {typeof value === 'boolean'
+            ? value
+              ? uiText('是', language)
+              : uiText('否', language)
+            : value}
         </span>
         {copyable && typeof value === 'string' && value && (
           <CopyButton text={value} fieldName={fieldName} />
@@ -80,21 +96,23 @@ export function TraderConfigViewModal({
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+    <UiDialog onClose={onClose} width={880}>
       <div
-        className="bg-[#1E2329] border border-[#2B3139] rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+        aria-label={uiText('交易员配置详情', language)}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[#2B3139] bg-gradient-to-r from-[#1E2329] to-[#252B35]">
+        <div className="desk-dialog-header">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#F0B90B] to-[#E1A706] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[var(--binance-yellow)] to-[#10b981] flex items-center justify-center">
               <span className="text-lg">👁️</span>
             </div>
             <div>
-              <h2 className="text-xl font-bold text-[#EAECEF]">交易员配置</h2>
-              <p className="text-sm text-[#848E9C] mt-1">
-                {traderData.trader_name} 的配置信息
+              <h2 className="text-xl font-bold text-[var(--foreground)]">
+                {uiText('交易员配置', language)}{' '}
+              </h2>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                {traderData.trader_name} {uiText('的配置信息', language)}{' '}
               </p>
             </div>
           </div>
@@ -104,103 +122,152 @@ export function TraderConfigViewModal({
               className="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"
               style={
                 traderData.is_running
-                  ? { background: 'rgba(14, 203, 129, 0.1)', color: '#0ECB81' }
-                  : { background: 'rgba(246, 70, 93, 0.1)', color: '#F6465D' }
+                  ? {
+                      background: 'rgba(14, 203, 129, 0.1)',
+                      color: 'var(--binance-green)',
+                    }
+                  : {
+                      background: 'rgba(246, 70, 93, 0.1)',
+                      color: 'var(--binance-red)',
+                    }
               }
             >
               <span>{traderData.is_running ? '●' : '○'}</span>
-              {traderData.is_running ? '运行中' : '已停止'}
+              {traderData.is_running
+                ? uiText('运行中', language)
+                : uiText('已停止', language)}
             </div>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg text-[#848E9C] hover:text-[#EAECEF] hover:bg-[#2B3139] transition-colors flex items-center justify-center"
-            >
-              ✕
-            </button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="desk-dialog-body space-y-6">
           {/* Basic Info */}
-          <div className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-[#EAECEF] mb-4 flex items-center gap-2">
-              🤖 基础信息
+          <UiCard className="bg-[var(--background)] border border-[var(--panel-border)] rounded-lg p-5">
+            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
+              {uiText('🤖 基础信息', language)}{' '}
             </h3>
             <div className="space-y-3">
               <InfoRow
-                label="交易员ID"
+                label={uiText('交易员ID', language)}
                 value={traderData.trader_id || ''}
                 copyable
                 fieldName="trader_id"
               />
               <InfoRow
-                label="交易员名称"
+                label={uiText('交易员名称', language)}
                 value={traderData.trader_name}
                 copyable
                 fieldName="trader_name"
               />
               <InfoRow
-                label="AI模型"
+                label={uiText('AI模型', language)}
                 value={getShortName(traderData.ai_model).toUpperCase()}
               />
               <InfoRow
-                label="交易所"
+                label={uiText('交易所', language)}
                 value={getShortName(traderData.exchange_id).toUpperCase()}
               />
               <InfoRow
-                label="初始余额"
+                label={uiText('初始余额', language)}
                 value={`$${traderData.initial_balance.toLocaleString()}`}
               />
             </div>
-          </div>
+          </UiCard>
 
           {/* Trading Configuration */}
-          <div className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-[#EAECEF] mb-4 flex items-center gap-2">
-              ⚖️ 交易配置
+          <UiCard className="bg-[var(--background)] border border-[var(--panel-border)] rounded-lg p-5">
+            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
+              {uiText('⚖️ 交易配置', language)}{' '}
             </h3>
             <div className="space-y-3">
               <InfoRow
-                label="保证金模式"
-                value={traderData.is_cross_margin ? '全仓' : '逐仓'}
+                label={uiText('保证金模式', language)}
+                value={
+                  traderData.is_cross_margin
+                    ? uiText('全仓', language)
+                    : uiText('逐仓', language)
+                }
               />
               <InfoRow
-                label="BTC/ETH 杠杆"
+                label={uiText('BTC/ETH 杠杆', language)}
                 value={`${traderData.btc_eth_leverage}x`}
               />
               <InfoRow
-                label="山寨币杠杆"
+                label={uiText('山寨币杠杆', language)}
                 value={`${traderData.altcoin_leverage}x`}
               />
               <InfoRow
-                label="交易币种"
-                value={traderData.trading_symbols || '使用默认币种'}
+                label={uiText('交易币种', language)}
+                value={
+                  traderData.trading_symbols || uiText('使用默认币种', language)
+                }
                 copyable
                 fieldName="trading_symbols"
               />
             </div>
-          </div>
+          </UiCard>
 
           {/* Signal Sources */}
-          <div className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-[#EAECEF] mb-4 flex items-center gap-2">
-              📡 信号源配置
+          <UiCard className="bg-[var(--background)] border border-[var(--panel-border)] rounded-lg p-5">
+            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
+              {uiText('📡 信号源配置', language)}{' '}
             </h3>
             <div className="space-y-3">
               <InfoRow
-                label="Coin Pool 信号"
-                value={traderData.use_coin_pool}
+                label={uiText('异动候选池', language)}
+                value={!!traderData.signal_config?.radar_enabled}
               />
-              <InfoRow label="OI Top 信号" value={traderData.use_oi_top} />
+              <InfoRow
+                label={uiText('币安原生信号', language)}
+                value={!!traderData.signal_config?.enabled}
+              />
+              {traderData.signal_config?.enabled && (
+                <>
+                  <InfoRow
+                    label={uiText('资产范围', language)}
+                    value={
+                      (
+                        {
+                          all: uiText('全部', language),
+                          crypto: uiText('加密货币', language),
+                          equity: uiText('美股 / ETF', language),
+                          commodity: uiText('大宗商品', language),
+                        } as Record<string, string>
+                      )[traderData.signal_config.category] ||
+                      uiText('全部', language)
+                    }
+                  />
+                  <InfoRow
+                    label={uiText('最多候选数', language)}
+                    value={traderData.signal_config.limit}
+                  />
+                  <InfoRow
+                    label={uiText('成交额排行', language)}
+                    value={traderData.signal_config.volume}
+                  />
+                  <InfoRow
+                    label={uiText('持仓量增长', language)}
+                    value={traderData.signal_config.oi}
+                  />
+                  <InfoRow
+                    label={uiText('资金费率偏离', language)}
+                    value={traderData.signal_config.funding}
+                  />
+                  <InfoRow
+                    label={uiText('价格突破', language)}
+                    value={traderData.signal_config.breakout}
+                  />
+                </>
+              )}
             </div>
-          </div>
+          </UiCard>
 
           {/* Custom Prompt */}
-          <div className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-5">
+          <UiCard className="bg-[var(--background)] border border-[var(--panel-border)] rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-[#EAECEF] flex items-center gap-2">
-                💬 交易策略提示词
+              <h3 className="text-lg font-semibold text-[var(--foreground)] flex items-center gap-2">
+                {uiText('💬 交易策略提示词', language)}{' '}
               </h3>
               {traderData.custom_prompt && (
                 <CopyButton
@@ -211,22 +278,22 @@ export function TraderConfigViewModal({
             </div>
             <div className="space-y-3">
               <InfoRow
-                label="覆盖默认提示词"
+                label={uiText('覆盖默认提示词', language)}
                 value={traderData.override_base_prompt}
               />
               {traderData.custom_prompt ? (
                 <div>
-                  <div className="text-sm text-[#848E9C] mb-2">
+                  <div className="text-sm text-[var(--text-secondary)] mb-2">
                     {traderData.override_base_prompt
-                      ? '自定义提示词'
-                      : '附加提示词'}
+                      ? uiText('自定义提示词', language)
+                      : uiText('附加提示词', language)}
                     ：
                   </div>
                   <div
-                    className="p-3 rounded border text-sm text-[#EAECEF] font-mono leading-relaxed max-h-48 overflow-y-auto"
+                    className="p-3 rounded border text-sm text-[var(--foreground)] font-mono leading-relaxed max-h-48 overflow-y-auto"
                     style={{
-                      background: '#0B0E11',
-                      border: '1px solid #2B3139',
+                      background: 'var(--background)',
+                      border: '1px solid var(--panel-border)',
                       whiteSpace: 'pre-wrap',
                     }}
                   >
@@ -235,37 +302,42 @@ export function TraderConfigViewModal({
                 </div>
               ) : (
                 <div
-                  className="text-sm text-[#848E9C] italic p-3 rounded border"
-                  style={{ border: '1px solid #2B3139' }}
+                  className="text-sm text-[var(--text-secondary)] italic p-3 rounded border"
+                  style={{ border: '1px solid var(--panel-border)' }}
                 >
-                  未设置自定义提示词，使用系统默认策略
+                  {uiText(
+                    '未设置自定义提示词，使用系统默认策略',
+                    language
+                  )}{' '}
                 </div>
               )}
             </div>
-          </div>
+          </UiCard>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t border-[#2B3139] bg-gradient-to-r from-[#1E2329] to-[#252B35]">
-          <button
+        <div className="desk-dialog-footer">
+          <UiButton
             onClick={onClose}
-            className="px-6 py-3 bg-[#2B3139] text-[#EAECEF] rounded-lg hover:bg-[#404750] transition-all duration-200 border border-[#404750]"
+            className="px-6 py-3 bg-[var(--panel-border)] text-[var(--foreground)] rounded-lg hover:bg-[#404750] transition-all duration-200 border border-[#404750]"
           >
-            关闭
-          </button>
-          <button
+            {uiText('关闭', language)}{' '}
+          </UiButton>
+          <UiButton
             onClick={() =>
               copyToClipboard(
                 JSON.stringify(traderData, null, 2),
                 'full_config'
               )
             }
-            className="px-6 py-3 bg-gradient-to-r from-[#F0B90B] to-[#E1A706] text-black rounded-lg hover:from-[#E1A706] hover:to-[#D4951E] transition-all duration-200 font-medium shadow-lg"
+            className="px-6 py-3 bg-gradient-to-r from-[var(--binance-yellow)] to-[#10b981] text-black rounded-lg hover:from-[#10b981] hover:to-[#059669] transition-all duration-200 font-medium shadow-lg"
           >
-            {copiedField === 'full_config' ? '✓ 已复制配置' : '📋 复制完整配置'}
-          </button>
+            {copiedField === 'full_config'
+              ? uiText('✓ 已复制配置', language)
+              : uiText('📋 复制完整配置', language)}
+          </UiButton>
         </div>
       </div>
-    </div>
+    </UiDialog>
   )
 }

@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"nofx/crypto"
-	"nofx/market"
+	"guanlan/crypto"
+	"guanlan/market"
 	"os"
 	"slices"
 	"strings"
@@ -54,7 +54,7 @@ type DatabaseInterface interface {
 
 // Database 配置数据库
 type Database struct {
-	db           *sql.DB
+	db            *sql.DB
 	cryptoService *crypto.CryptoService
 }
 
@@ -227,12 +227,13 @@ func (d *Database) createTables() error {
 		`ALTER TABLE exchanges ADD COLUMN aster_private_key TEXT DEFAULT ''`,
 		`ALTER TABLE traders ADD COLUMN custom_prompt TEXT DEFAULT ''`,
 		`ALTER TABLE traders ADD COLUMN override_base_prompt BOOLEAN DEFAULT 0`,
-		`ALTER TABLE traders ADD COLUMN is_cross_margin BOOLEAN DEFAULT 1`,             // 默认为全仓模式
-		`ALTER TABLE traders ADD COLUMN use_default_coins BOOLEAN DEFAULT 1`,           // 默认使用默认币种
-		`ALTER TABLE traders ADD COLUMN custom_coins TEXT DEFAULT ''`,                  // 自定义币种列表（JSON格式）
-		`ALTER TABLE traders ADD COLUMN btc_eth_leverage INTEGER DEFAULT 5`,            // BTC/ETH杠杆倍数
-		`ALTER TABLE traders ADD COLUMN altcoin_leverage INTEGER DEFAULT 5`,            // 山寨币杠杆倍数
-		`ALTER TABLE traders ADD COLUMN trading_symbols TEXT DEFAULT ''`,               // 交易币种，逗号分隔
+		`ALTER TABLE traders ADD COLUMN is_cross_margin BOOLEAN DEFAULT 1`,   // 默认为全仓模式
+		`ALTER TABLE traders ADD COLUMN use_default_coins BOOLEAN DEFAULT 1`, // 默认使用默认币种
+		`ALTER TABLE traders ADD COLUMN custom_coins TEXT DEFAULT ''`,        // 自定义币种列表（JSON格式）
+		`ALTER TABLE traders ADD COLUMN btc_eth_leverage INTEGER DEFAULT 5`,  // BTC/ETH杠杆倍数
+		`ALTER TABLE traders ADD COLUMN altcoin_leverage INTEGER DEFAULT 5`,  // 山寨币杠杆倍数
+		`ALTER TABLE traders ADD COLUMN trading_symbols TEXT DEFAULT ''`,     // 交易币种，逗号分隔
+		`ALTER TABLE traders ADD COLUMN signal_config TEXT DEFAULT '{}'`,
 		`ALTER TABLE traders ADD COLUMN use_coin_pool BOOLEAN DEFAULT 0`,               // 是否使用COIN POOL信号源
 		`ALTER TABLE traders ADD COLUMN use_oi_top BOOLEAN DEFAULT 0`,                  // 是否使用OI TOP信号源
 		`ALTER TABLE traders ADD COLUMN system_prompt_template TEXT DEFAULT 'default'`, // 系统提示词模板名称
@@ -262,6 +263,11 @@ func (d *Database) initDefaultData() error {
 	}{
 		{"deepseek", "DeepSeek", "deepseek"},
 		{"qwen", "Qwen", "qwen"},
+		{"gemini", "Google Gemini", "gemini"},
+		{"kimi", "Kimi / Moonshot", "kimi"},
+		{"siliconflow", "硅基流动", "siliconflow"},
+		{"openrouter", "OpenRouter · GPT / Claude 等", "openrouter"},
+		{"custom", "自定义兼容接口", "custom"},
 	}
 
 	for _, model := range aiModels {
@@ -450,6 +456,7 @@ type ExchangeConfig struct {
 
 // TraderRecord 交易员配置（数据库实体）
 type TraderRecord struct {
+	SignalConfig         string    `json:"signal_config"`
 	ID                   string    `json:"id"`
 	UserID               string    `json:"user_id"`
 	Name                 string    `json:"name"`
@@ -741,12 +748,12 @@ func (d *Database) GetExchanges(userID string) ([]*ExchangeConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// 解密敏感字段
 		exchange.APIKey = d.decryptSensitiveData(exchange.APIKey)
 		exchange.SecretKey = d.decryptSensitiveData(exchange.SecretKey)
 		exchange.AsterPrivateKey = d.decryptSensitiveData(exchange.AsterPrivateKey)
-		
+
 		exchanges = append(exchanges, &exchange)
 	}
 
@@ -838,7 +845,7 @@ func (d *Database) CreateExchange(userID, id, name, typ string, enabled bool, ap
 	encryptedAPIKey := d.encryptSensitiveData(apiKey)
 	encryptedSecretKey := d.encryptSensitiveData(secretKey)
 	encryptedAsterPrivateKey := d.encryptSensitiveData(asterPrivateKey)
-	
+
 	_, err := d.db.Exec(`
 		INSERT OR IGNORE INTO exchanges (id, user_id, name, type, enabled, api_key, secret_key, testnet, hyperliquid_wallet_addr, aster_user, aster_signer, aster_private_key) 
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -849,9 +856,9 @@ func (d *Database) CreateExchange(userID, id, name, typ string, enabled bool, ap
 // CreateTrader 创建交易员
 func (d *Database) CreateTrader(trader *TraderRecord) error {
 	_, err := d.db.Exec(`
-		INSERT INTO traders (id, user_id, name, ai_model_id, exchange_id, initial_balance, scan_interval_minutes, is_running, btc_eth_leverage, altcoin_leverage, trading_symbols, use_coin_pool, use_oi_top, custom_prompt, override_base_prompt, system_prompt_template, is_cross_margin)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, trader.ID, trader.UserID, trader.Name, trader.AIModelID, trader.ExchangeID, trader.InitialBalance, trader.ScanIntervalMinutes, trader.IsRunning, trader.BTCETHLeverage, trader.AltcoinLeverage, trader.TradingSymbols, trader.UseCoinPool, trader.UseOITop, trader.CustomPrompt, trader.OverrideBasePrompt, trader.SystemPromptTemplate, trader.IsCrossMargin)
+		INSERT INTO traders (id, user_id, name, ai_model_id, exchange_id, initial_balance, scan_interval_minutes, is_running, btc_eth_leverage, altcoin_leverage, trading_symbols, use_coin_pool, use_oi_top, custom_prompt, override_base_prompt, system_prompt_template, is_cross_margin, signal_config)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, trader.ID, trader.UserID, trader.Name, trader.AIModelID, trader.ExchangeID, trader.InitialBalance, trader.ScanIntervalMinutes, trader.IsRunning, trader.BTCETHLeverage, trader.AltcoinLeverage, trader.TradingSymbols, trader.UseCoinPool, trader.UseOITop, trader.CustomPrompt, trader.OverrideBasePrompt, trader.SystemPromptTemplate, trader.IsCrossMargin, trader.SignalConfig)
 	return err
 }
 
@@ -864,7 +871,7 @@ func (d *Database) GetTraders(userID string) ([]*TraderRecord, error) {
 		       COALESCE(use_coin_pool, 0) as use_coin_pool, COALESCE(use_oi_top, 0) as use_oi_top,
 		       COALESCE(custom_prompt, '') as custom_prompt, COALESCE(override_base_prompt, 0) as override_base_prompt,
 		       COALESCE(system_prompt_template, 'default') as system_prompt_template,
-		       COALESCE(is_cross_margin, 1) as is_cross_margin, created_at, updated_at
+		       COALESCE(is_cross_margin, 1) as is_cross_margin, COALESCE(signal_config, '{}'), created_at, updated_at
 		FROM traders WHERE user_id = ? ORDER BY created_at DESC
 	`, userID)
 	if err != nil {
@@ -881,7 +888,7 @@ func (d *Database) GetTraders(userID string) ([]*TraderRecord, error) {
 			&trader.BTCETHLeverage, &trader.AltcoinLeverage, &trader.TradingSymbols,
 			&trader.UseCoinPool, &trader.UseOITop,
 			&trader.CustomPrompt, &trader.OverrideBasePrompt, &trader.SystemPromptTemplate,
-			&trader.IsCrossMargin,
+			&trader.IsCrossMargin, &trader.SignalConfig,
 			&trader.CreatedAt, &trader.UpdatedAt,
 		)
 		if err != nil {
@@ -906,12 +913,12 @@ func (d *Database) UpdateTrader(trader *TraderRecord) error {
 			name = ?, ai_model_id = ?, exchange_id = ?, initial_balance = ?,
 			scan_interval_minutes = ?, btc_eth_leverage = ?, altcoin_leverage = ?,
 			trading_symbols = ?, custom_prompt = ?, override_base_prompt = ?,
-			system_prompt_template = ?, is_cross_margin = ?, updated_at = CURRENT_TIMESTAMP
+			system_prompt_template = ?, is_cross_margin = ?, signal_config = ?, use_coin_pool = ?, use_oi_top = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND user_id = ?
 	`, trader.Name, trader.AIModelID, trader.ExchangeID, trader.InitialBalance,
 		trader.ScanIntervalMinutes, trader.BTCETHLeverage, trader.AltcoinLeverage,
 		trader.TradingSymbols, trader.CustomPrompt, trader.OverrideBasePrompt,
-		trader.SystemPromptTemplate, trader.IsCrossMargin, trader.ID, trader.UserID)
+		trader.SystemPromptTemplate, trader.IsCrossMargin, trader.SignalConfig, trader.UseCoinPool, trader.UseOITop, trader.ID, trader.UserID)
 	return err
 }
 
@@ -950,7 +957,7 @@ func (d *Database) GetTraderConfig(userID, traderID string) (*TraderRecord, *AIM
 			COALESCE(t.custom_prompt, '') as custom_prompt,
 			COALESCE(t.override_base_prompt, 0) as override_base_prompt,
 			COALESCE(t.system_prompt_template, 'default') as system_prompt_template,
-			COALESCE(t.is_cross_margin, 1) as is_cross_margin,
+			COALESCE(t.is_cross_margin, 1) as is_cross_margin, COALESCE(t.signal_config, '{}'),
 			t.created_at, t.updated_at,
 			a.id, a.user_id, a.name, a.provider, a.enabled, a.api_key,
 			COALESCE(a.custom_api_url, '') as custom_api_url,
@@ -972,7 +979,7 @@ func (d *Database) GetTraderConfig(userID, traderID string) (*TraderRecord, *AIM
 		&trader.BTCETHLeverage, &trader.AltcoinLeverage, &trader.TradingSymbols,
 		&trader.UseCoinPool, &trader.UseOITop,
 		&trader.CustomPrompt, &trader.OverrideBasePrompt, &trader.SystemPromptTemplate,
-		&trader.IsCrossMargin,
+		&trader.IsCrossMargin, &trader.SignalConfig,
 		&trader.CreatedAt, &trader.UpdatedAt,
 		&aiModel.ID, &aiModel.UserID, &aiModel.Name, &aiModel.Provider, &aiModel.Enabled, &aiModel.APIKey,
 		&aiModel.CustomAPIURL, &aiModel.CustomModelName,
@@ -1185,13 +1192,13 @@ func (d *Database) encryptSensitiveData(plaintext string) string {
 	if d.cryptoService == nil || plaintext == "" {
 		return plaintext
 	}
-	
+
 	encrypted, err := d.cryptoService.EncryptForStorage(plaintext)
 	if err != nil {
 		log.Printf("⚠️ 加密失败: %v", err)
 		return plaintext // 返回明文作为降级处理
 	}
-	
+
 	return encrypted
 }
 
@@ -1200,17 +1207,17 @@ func (d *Database) decryptSensitiveData(encrypted string) string {
 	if d.cryptoService == nil || encrypted == "" {
 		return encrypted
 	}
-	
+
 	// 如果不是加密格式，直接返回
 	if !d.cryptoService.IsEncryptedStorageValue(encrypted) {
 		return encrypted
 	}
-	
+
 	decrypted, err := d.cryptoService.DecryptFromStorage(encrypted)
 	if err != nil {
 		log.Printf("⚠️ 解密失败: %v", err)
 		return encrypted // 返回加密文本作为降级处理
 	}
-	
+
 	return decrypted
 }

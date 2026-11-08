@@ -1,12 +1,14 @@
+import { UiCard } from './design/Controls'
+import { UiButton, UiForm, UiInput } from './design/Controls'
 import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { t } from '../i18n/translations'
-import { Header } from './Header'
+import HeaderBar from './landing/HeaderBar'
 import { ArrowLeft, KeyRound, Eye, EyeOff } from 'lucide-react'
 
 export function ResetPasswordPage() {
-  const { language } = useLanguage()
+  const { language, setLanguage } = useLanguage()
   const { resetPassword } = useAuth()
   const [email, setEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -48,79 +50,95 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#0B0E11' }}>
-      <Header simple />
+    <div className="min-h-screen" style={{ background: 'var(--background)' }}>
+      <HeaderBar
+        isLoggedIn={false}
+        language={language}
+        onLanguageChange={setLanguage}
+      />
 
-      <div
-        className="flex items-center justify-center"
-        style={{ minHeight: 'calc(100vh - 80px)' }}
-      >
-        <div className="w-full max-w-md">
+      <div id="main-content" className="desk-auth">
+        <div className="desk-auth-card ant-desk-auth">
           {/* Back to Login */}
-          <button
+          <UiButton
             onClick={() => {
               window.history.pushState({}, '', '/login')
               window.dispatchEvent(new PopStateEvent('popstate'))
             }}
-            className="flex items-center gap-2 mb-6 text-sm hover:text-[#F0B90B] transition-colors"
-            style={{ color: '#848E9C' }}
+            className="flex items-center gap-2 mb-6 text-sm hover:text-[var(--binance-yellow)] transition-colors"
+            style={{ color: 'var(--text-secondary)' }}
           >
             <ArrowLeft className="w-4 h-4" />
             {t('backToLogin', language)}
-          </button>
+          </UiButton>
 
           {/* Logo */}
           <div className="text-center mb-8">
             <div
               className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full"
-              style={{ background: 'rgba(240, 185, 11, 0.1)' }}
+              style={{ background: 'rgba(52, 211, 153, 0.1)' }}
             >
-              <KeyRound className="w-8 h-8" style={{ color: '#F0B90B' }} />
+              <KeyRound
+                className="w-8 h-8"
+                style={{ color: 'var(--binance-yellow)' }}
+              />
             </div>
-            <h1 className="text-2xl font-bold" style={{ color: '#EAECEF' }}>
+            <h1
+              className="text-2xl font-bold"
+              style={{ color: 'var(--foreground)' }}
+            >
               {t('resetPasswordTitle', language)}
             </h1>
-            <p className="text-sm mt-2" style={{ color: '#848E9C' }}>
+            <p
+              className="text-sm mt-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               使用邮箱和 Google Authenticator 重置密码
             </p>
           </div>
 
           {/* Reset Password Form */}
-          <div
+          <UiCard
             className="rounded-lg p-6"
-            style={{ background: '#1E2329', border: '1px solid #2B3139' }}
+            style={{
+              background: 'var(--panel-bg)',
+              border: '1px solid var(--panel-border)',
+            }}
           >
             {success ? (
               <div className="text-center py-8">
                 <div className="text-5xl mb-4">✅</div>
                 <p
                   className="text-lg font-semibold mb-2"
-                  style={{ color: '#EAECEF' }}
+                  style={{ color: 'var(--foreground)' }}
                 >
                   {t('resetPasswordSuccess', language)}
                 </p>
-                <p className="text-sm" style={{ color: '#848E9C' }}>
+                <p
+                  className="text-sm"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
                   3秒后将自动跳转到登录页面...
                 </p>
               </div>
             ) : (
-              <form onSubmit={handleResetPassword} className="space-y-4">
+              <UiForm onSubmit={handleResetPassword} className="space-y-4">
                 <div>
                   <label
                     className="block text-sm font-semibold mb-2"
-                    style={{ color: '#EAECEF' }}
+                    style={{ color: 'var(--foreground)' }}
                   >
                     {t('email', language)}
                   </label>
-                  <input
+                  <UiInput
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-3 py-2 rounded"
                     style={{
-                      background: '#0B0E11',
-                      border: '1px solid #2B3139',
-                      color: '#EAECEF',
+                      background: 'var(--background)',
+                      border: '1px solid var(--panel-border)',
+                      color: 'var(--foreground)',
                     }}
                     placeholder={t('emailPlaceholder', language)}
                     required
@@ -130,26 +148,26 @@ export function ResetPasswordPage() {
                 <div>
                   <label
                     className="block text-sm font-semibold mb-2"
-                    style={{ color: '#EAECEF' }}
+                    style={{ color: 'var(--foreground)' }}
                   >
                     {t('newPassword', language)}
                   </label>
                   <div className="relative">
-                    <input
+                    <UiInput
                       type={showPassword ? 'text' : 'password'}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       className="w-full px-3 py-2 pr-10 rounded"
                       style={{
-                        background: '#0B0E11',
-                        border: '1px solid #2B3139',
-                        color: '#EAECEF',
+                        background: 'var(--background)',
+                        border: '1px solid var(--panel-border)',
+                        color: 'var(--foreground)',
                       }}
                       placeholder={t('newPasswordPlaceholder', language)}
                       required
                       minLength={6}
                     />
-                    <button
+                    <UiButton
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
@@ -159,33 +177,33 @@ export function ResetPasswordPage() {
                       ) : (
                         <Eye className="w-5 h-5" />
                       )}
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
 
                 <div>
                   <label
                     className="block text-sm font-semibold mb-2"
-                    style={{ color: '#EAECEF' }}
+                    style={{ color: 'var(--foreground)' }}
                   >
                     {t('confirmPassword', language)}
                   </label>
                   <div className="relative">
-                    <input
+                    <UiInput
                       type={showConfirmPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       className="w-full px-3 py-2 pr-10 rounded"
                       style={{
-                        background: '#0B0E11',
-                        border: '1px solid #2B3139',
-                        color: '#EAECEF',
+                        background: 'var(--background)',
+                        border: '1px solid var(--panel-border)',
+                        color: 'var(--foreground)',
                       }}
                       placeholder={t('confirmPasswordPlaceholder', language)}
                       required
                       minLength={6}
                     />
-                    <button
+                    <UiButton
                       type="button"
                       onClick={() =>
                         setShowConfirmPassword(!showConfirmPassword)
@@ -197,24 +215,27 @@ export function ResetPasswordPage() {
                       ) : (
                         <Eye className="w-5 h-5" />
                       )}
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
 
                 <div>
                   <label
                     className="block text-sm font-semibold mb-2"
-                    style={{ color: '#EAECEF' }}
+                    style={{ color: 'var(--foreground)' }}
                   >
                     {t('otpCode', language)}
                   </label>
                   <div className="text-center mb-3">
                     <div className="text-3xl">📱</div>
-                    <p className="text-xs mt-1" style={{ color: '#848E9C' }}>
+                    <p
+                      className="text-xs mt-1"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
                       打开 Google Authenticator 获取6位验证码
                     </p>
                   </div>
-                  <input
+                  <UiInput
                     type="text"
                     value={otpCode}
                     onChange={(e) =>
@@ -222,9 +243,9 @@ export function ResetPasswordPage() {
                     }
                     className="w-full px-3 py-2 rounded text-center text-2xl font-mono"
                     style={{
-                      background: '#0B0E11',
-                      border: '1px solid #2B3139',
-                      color: '#EAECEF',
+                      background: 'var(--background)',
+                      border: '1px solid var(--panel-border)',
+                      color: 'var(--foreground)',
                     }}
                     placeholder={t('otpPlaceholder', language)}
                     maxLength={6}
@@ -237,26 +258,26 @@ export function ResetPasswordPage() {
                     className="text-sm px-3 py-2 rounded"
                     style={{
                       background: 'rgba(246, 70, 93, 0.1)',
-                      color: '#F6465D',
+                      color: 'var(--binance-red)',
                     }}
                   >
                     {error}
                   </div>
                 )}
 
-                <button
+                <UiButton
                   type="submit"
                   disabled={loading || otpCode.length !== 6}
-                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50"
-                  style={{ background: '#F0B90B', color: '#000' }}
+                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all  disabled:opacity-50"
+                  style={{ background: 'var(--binance-yellow)', color: '#000' }}
                 >
                   {loading
                     ? t('loading', language)
                     : t('resetPasswordButton', language)}
-                </button>
-              </form>
+                </UiButton>
+              </UiForm>
             )}
-          </div>
+          </UiCard>
         </div>
       </div>
     </div>

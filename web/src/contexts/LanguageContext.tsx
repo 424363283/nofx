@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from 'react'
 import type { Language } from '../i18n/translations'
 
 interface LanguageContextType {
@@ -11,11 +17,16 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
 )
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Initialize language from localStorage or default to English
+  // Initialize language from localStorage or default to Chinese
   const [language, setLanguage] = useState<Language>(() => {
     const saved = localStorage.getItem('language')
-    return saved === 'en' || saved === 'zh' ? saved : 'en'
+    return saved === 'en' || saved === 'zh' ? saved : 'zh'
   })
+
+  useEffect(() => {
+    document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
+    document.title = language === 'zh' ? '观澜' : 'Guanlan'
+  }, [language])
 
   // Save language to localStorage whenever it changes
   const handleSetLanguage = (lang: Language) => {

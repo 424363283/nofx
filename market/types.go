@@ -34,6 +34,8 @@ type IntradayData struct {
 
 // LongerTermData 长期数据(4小时时间框架)
 type LongerTermData struct {
+	CandleAt      time.Time
+	LastClose     float64
 	EMA20         float64
 	EMA50         float64
 	ATR3          float64

@@ -8,7 +8,7 @@
 
 提交 bug 前，请检查：
 
-1. ✅ **后端正在运行**: `docker compose ps` 或 `ps aux | grep nofx`
+1. ✅ **后端正在运行**: `docker compose ps` 或 `ps aux | grep guanlan`
 2. ✅ **前端可访问**: 在浏览器打开 http://localhost:3000
 3. ✅ **API 正常响应**: `curl http://localhost:8080/api/health`
 4. ✅ **检查日志中的错误**: 参见下方 [如何捕获日志](#如何捕获日志)
@@ -226,7 +226,7 @@ docker info | grep -A 10 "Registry Mirrors"
 # 应该显示你配置的镜像源
 ```
 
-**相关 Issue:** [#168](https://github.com/tinkle-community/nofx/issues/168)
+**相关 Issue:** [#168](#)
 
 ---
 
@@ -242,7 +242,7 @@ lsof -i :8080
 netstat -tulpn | grep 8080
 
 # 杀死进程或在 .env 中更改端口
-NOFX_BACKEND_PORT=8081
+GUANLAN_BACKEND_PORT=8081
 ```
 
 ---
@@ -307,7 +307,7 @@ date
 
 ```bash
 # 检查容器时间
-docker exec nofx-backend date
+docker exec guanlan-backend date
 
 # 如果时间错误，重启 Docker 服务
 sudo systemctl restart docker
@@ -330,7 +330,7 @@ environment:
    - 登录币安 → API 管理
    - 删除旧密钥
    - 创建新密钥
-   - 更新 NOFX 配置
+   - 更新 GUANLAN 配置
 
 **解决方案 3: 检查速率限制**
 
@@ -340,7 +340,7 @@ environment:
 - 减少交易员数量
 - 增加决策间隔时间（例如从 1 分钟改为 3-5 分钟）
 
-**相关 Issue:** [#60](https://github.com/tinkle-community/nofx/issues/60)
+**相关 Issue:** [#60](#)
 
 ---
 
@@ -387,15 +387,15 @@ environment:
 
 **解决方案:**
 ```bash
-# 停止所有 NOFX 进程
+# 停止所有 GUANLAN 进程
 docker compose down
 # 或
-pkill nofx
+pkill guanlan
 
 # 重启
 docker compose up -d
 # 或
-./nofx
+./guanlan
 ```
 
 ---
@@ -439,13 +439,13 @@ docker compose logs backend --tail=500 > backend_logs.txt
 
 **手动/PM2:**
 ```bash
-# 运行 ./nofx 的终端会显示日志
+# 运行 ./guanlan 的终端会显示日志
 
 # PM2:
-pm2 logs nofx --lines 100
+pm2 logs guanlan --lines 100
 
 # 保存到文件
-pm2 logs nofx --lines 500 > backend_logs.txt
+pm2 logs guanlan --lines 500 > backend_logs.txt
 ```
 
 ---
@@ -559,8 +559,8 @@ sqlite3 config.db "SELECT key, value FROM system_config;"
    - 描述您已尝试的方法
 
 3. **加入社区:**
-   - [Telegram 开发者社区](https://t.me/nofx_dev_community)
-   - [GitHub Discussions](https://github.com/tinkle-community/nofx/discussions)
+   - [Telegram 开发者社区](#)
+   - [GitHub Discussions](#)
 
 ---
 

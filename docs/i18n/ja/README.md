@@ -1,4 +1,4 @@
-# 🤖 NOFX - Agentic Trading OS
+# 🤖 GUANLAN - Agentic Trading OS
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![React](https://img.shields.io/badge/React-18+-61DAFB?style=flat&logo=react)](https://reactjs.org/)
@@ -8,13 +8,13 @@
 
 **言語:** [English](../../../README.md) | [中文](../zh-CN/README.md) | [Українська](../uk/README.md) | [Русский](../ru/README.md) | [日本語](README.md)
 
-**公式Twitter:** [@nofx_ai](https://x.com/nofx_ai)
+**公式Twitter:** [@guanlan_ai](#)
 
 ---
 
 ## 🚀 ユニバーサルAIトレーディングOS
 
-**NOFX**は、統合アーキテクチャに基づいて構築された**ユニバーサルAgenticトレーディングOS**です。暗号通貨市場において **「マルチエージェント判断 → 統一リスク管理 → 低レイテンシ実行 → ライブ/ペーパーアカウントバックテスト」** のループを成功裏に完成させ、現在この技術スタックを **株式、先物、オプション、外国為替、およびすべての金融市場** に拡大しています。
+**GUANLAN**は、統合アーキテクチャに基づいて構築された**ユニバーサルAgenticトレーディングOS**です。暗号通貨市場において **「マルチエージェント判断 → 統一リスク管理 → 低レイテンシ実行 → ライブ/ペーパーアカウントバックテスト」** のループを成功裏に完成させ、現在この技術スタックを **株式、先物、オプション、外国為替、およびすべての金融市場** に拡大しています。
 
 ### 🎯 コア機能
 
@@ -35,7 +35,7 @@
 
 **投資に関するお問い合わせ**は、TwitterでTinkleまたはZackにDMをお送りください。
 
-**パートナーシップおよび協業**については、公式Twitter [@nofx_ai](https://x.com/nofx_ai)にDMをお送りください。
+**パートナーシップおよび協業**については、公式Twitter [@guanlan_ai](#)にDMをお送りください。
 
 ---
 
@@ -45,7 +45,7 @@
 
 Telegram開発者コミュニティに参加して、議論、アイデアの共有、サポートを受けましょう：
 
-**💬 [NOFX開発者コミュニティ](https://t.me/nofx_dev_community)**
+**💬 [GUANLAN開発者コミュニティ](#)**
 
 ---
 
@@ -53,7 +53,7 @@ Telegram開発者コミュニティに参加して、議論、アイデアの共
 
 ### 🚀 マルチ取引所対応！
 
-NOFXは現在、**3つの主要取引所**をサポートしています：Binance、Hyperliquid、Aster DEX！
+GUANLANは現在、**3つの主要取引所**をサポートしています：Binance、Hyperliquid、Aster DEX！
 
 #### **Hyperliquid取引所**
 
@@ -120,7 +120,7 @@ Binance互換の分散型無期限先物取引所！
 
 ## ✨ 現在の実装 - 暗号通貨市場
 
-NOFXは現在、以下の実証済み機能で**暗号通貨市場において完全に稼働**しています：
+GUANLANは現在、以下の実証済み機能で**暗号通貨市場において完全に稼働**しています：
 
 ### 🏆 マルチエージェント競争フレームワーク
 - **ライブエージェントバトル**: QwenとDeepSeekモデルがリアルタイム取引で競争
@@ -182,7 +182,7 @@ NOFXは現在、以下の実証済み機能で**暗号通貨市場において�
 ## 🏗️ 技術アーキテクチャ
 
 ```
-nofx/
+guanlan/
 ├── main.go                          # プログラムエントリ（マルチトレーダーマネージャー）
 ├── config.json                      # 設定ファイル（APIキー、マルチトレーダー設定）
 │
@@ -355,8 +355,8 @@ sudo apt-get install libta-lib0-dev
 ### 2. プロジェクトをクローン
 
 ```bash
-git clone https://github.com/tinkle-community/nofx.git
-cd nofx
+git clone #
+cd guanlan
 ```
 
 ### 3. 依存関係をインストール
@@ -487,7 +487,7 @@ cp config.json.example config.json
 
 #### 🔷 代替：Hyperliquid取引所の使用
 
-**NOFXはHyperliquidもサポート** - 分散型無期限先物取引所。Binanceの代わりにHyperliquidを使用するには：
+**GUANLANはHyperliquidもサポート** - 分散型無期限先物取引所。Binanceの代わりにHyperliquidを使用するには：
 
 **ステップ1**: Ethereum秘密鍵を取得（Hyperliquid認証用）
 
@@ -531,7 +531,7 @@ cp config.json.example config.json
 
 #### 🔶 代替：Aster DEX取引所の使用
 
-**NOFXはAster DEXもサポート** - Binance互換の分散型無期限先物取引所！
+**GUANLANはAster DEXもサポート** - Binance互換の分散型無期限先物取引所！
 
 **なぜAsterを選ぶ？**
 - 🎯 Binance互換API（簡単な移行）
@@ -781,10 +781,10 @@ cp config.json.example config.json
 
 ```bash
 # プログラムをビルド（初回のみ、またはコード変更後）
-go build -o nofx
+go build -o guanlan
 
 # バックエンドを起動
-./nofx
+./guanlan
 ```
 
 **表示されるべきもの：**
@@ -1317,8 +1317,8 @@ IssueとPull Requestを歓迎します！
 
 
 ### 🐛 技術サポート
-- **GitHub Issues**: [Issueを提出](https://github.com/tinkle-community/nofx/issues)
-- **開発者コミュニティ**: [Telegramグループ](https://t.me/nofx_dev_community)
+- **GitHub Issues**: [Issueを提出](#)
+- **開発者コミュニティ**: [Telegramグループ](#)
 
 ---
 
@@ -1340,4 +1340,4 @@ IssueとPull Requestを歓迎します！
 
 ## ⭐ Star履歴
 
-[![Star履歴チャート](https://api.star-history.com/svg?repos=tinkle-community/nofx&type=Date)](https://star-history.com/#tinkle-community/nofx&Date)
+[![Star履歴チャート](#)](#)

@@ -26,8 +26,8 @@ Bootstrap 是一个模块化的初始化框架，允许各个模块通过注册�
 package proxy
 
 import (
-	"nofx/bootstrap"
-	"nofx/config"
+	"guanlan/bootstrap"
+	"guanlan/config"
 )
 
 func init() {
@@ -58,13 +58,13 @@ package main
 
 import (
 	"log"
-	"nofx/bootstrap"
-	"nofx/config"
+	"guanlan/bootstrap"
+	"guanlan/config"
 
 	// 导入需要初始化的模块（触发 init() 注册）
-	_ "nofx/proxy"
-	_ "nofx/market"
-	_ "nofx/trader"
+	_ "guanlan/proxy"
+	_ "guanlan/market"
+	_ "guanlan/trader"
 )
 
 func main() {
@@ -251,7 +251,7 @@ package database
 
 import (
 	"database/sql"
-	"nofx/bootstrap"
+	"guanlan/bootstrap"
 )
 
 func init() {
@@ -282,8 +282,8 @@ func initDatabase(ctx *bootstrap.Context) error {
 package proxy
 
 import (
-	"nofx/bootstrap"
-	"nofx/config"
+	"guanlan/bootstrap"
+	"guanlan/config"
 )
 
 func init() {
@@ -313,7 +313,7 @@ func initProxy(ctx *bootstrap.Context) error {
 package trader
 
 import (
-	"nofx/bootstrap"
+	"guanlan/bootstrap"
 )
 
 func init() {
@@ -452,4 +452,4 @@ func initModule(ctx *bootstrap.Context) error {
 
 ## 许可证
 
-本模块为 NOFX 项目内部模块，遵循项目整体许可证。
+本模块为 GUANLAN 项目内部模块，遵循项目整体许可证。

@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"nofx/config"
+	"guanlan/config"
 	"os"
 
 	"github.com/sirupsen/logrus"

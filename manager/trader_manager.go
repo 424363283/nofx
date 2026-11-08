@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"guanlan/config"
+	"guanlan/trader"
 	"log"
-	"nofx/config"
-	"nofx/trader"
 	"sort"
 	"strconv"
 	"strings"
@@ -214,6 +214,8 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 
 	// 构建AutoTraderConfig
 	traderConfig := trader.AutoTraderConfig{
+		SignalConfig:          traderCfg.SignalConfig,
+		SignalSymbols:         traderCfg.TradingSymbols,
 		ID:                    traderCfg.ID,
 		Name:                  traderCfg.Name,
 		AIModel:               aiModelCfg.Provider, // 使用provider作为模型标识
@@ -259,6 +261,8 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		traderConfig.QwenKey = aiModelCfg.APIKey
 	} else if aiModelCfg.Provider == "deepseek" {
 		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+	} else {
+		traderConfig.CustomAPIKey = aiModelCfg.APIKey
 	}
 
 	// 创建trader实例
@@ -321,6 +325,8 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 
 	// 构建AutoTraderConfig
 	traderConfig := trader.AutoTraderConfig{
+		SignalConfig:          traderCfg.SignalConfig,
+		SignalSymbols:         traderCfg.TradingSymbols,
 		ID:                    traderCfg.ID,
 		Name:                  traderCfg.Name,
 		AIModel:               aiModelCfg.Provider, // 使用provider作为模型标识
@@ -365,6 +371,8 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		traderConfig.QwenKey = aiModelCfg.APIKey
 	} else if aiModelCfg.Provider == "deepseek" {
 		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+	} else {
+		traderConfig.CustomAPIKey = aiModelCfg.APIKey
 	}
 
 	// 创建trader实例
@@ -489,8 +497,27 @@ func (tm *TraderManager) GetComparisonData() (map[string]interface{}, error) {
 	return comparison, nil
 }
 
+// RemoveTrader detaches a deleted trader and invalidates the overview atomically.
+func (tm *TraderManager) RemoveTrader(id string) {
+	tm.mu.Lock()
+	removed := tm.traders[id]
+	delete(tm.traders, id)
+	tm.competitionCache.mu.Lock()
+	tm.competitionCache.data = make(map[string]interface{})
+	tm.competitionCache.timestamp = time.Time{}
+	tm.competitionCache.mu.Unlock()
+	tm.mu.Unlock()
+	if removed != nil {
+		removed.ClosePositionStream()
+		removed.Stop()
+	}
+}
+
 // GetCompetitionData 获取竞赛数据（全平台所有交易员）
 func (tm *TraderManager) GetCompetitionData() (map[string]interface{}, error) {
+	// Serialize membership changes with cache reads and publication.
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
 	// 检查缓存是否有效（30秒内）
 	tm.competitionCache.mu.RLock()
 	if time.Since(tm.competitionCache.timestamp) < 30*time.Second && len(tm.competitionCache.data) > 0 {
@@ -499,20 +526,18 @@ func (tm *TraderManager) GetCompetitionData() (map[string]interface{}, error) {
 		for k, v := range tm.competitionCache.data {
 			cachedData[k] = v
 		}
+		cacheAge := time.Since(tm.competitionCache.timestamp).Seconds()
 		tm.competitionCache.mu.RUnlock()
-		log.Printf("📋 返回竞赛数据缓存 (缓存时间: %.1fs)", time.Since(tm.competitionCache.timestamp).Seconds())
+		log.Printf("📋 返回竞赛数据缓存 (缓存时间: %.1fs)", cacheAge)
 		return cachedData, nil
 	}
 	tm.competitionCache.mu.RUnlock()
-
-	tm.mu.RLock()
 
 	// 获取所有交易员列表
 	allTraders := make([]*trader.AutoTrader, 0, len(tm.traders))
 	for _, t := range tm.traders {
 		allTraders = append(allTraders, t)
 	}
-	tm.mu.RUnlock()
 
 	log.Printf("🔄 重新获取竞赛数据，交易员数量: %d", len(allTraders))
 
@@ -873,6 +898,8 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 
 	// 构建AutoTraderConfig
 	traderConfig := trader.AutoTraderConfig{
+		SignalConfig:         traderCfg.SignalConfig,
+		SignalSymbols:        traderCfg.TradingSymbols,
 		ID:                   traderCfg.ID,
 		Name:                 traderCfg.Name,
 		AIModel:              aiModelCfg.Provider, // 使用provider作为模型标识
@@ -913,6 +940,8 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 		traderConfig.QwenKey = aiModelCfg.APIKey
 	} else if aiModelCfg.Provider == "deepseek" {
 		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+	} else {
+		traderConfig.CustomAPIKey = aiModelCfg.APIKey
 	}
 
 	// 创建trader实例

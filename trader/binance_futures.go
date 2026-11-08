@@ -4,13 +4,16 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/adshao/go-binance/v2/common"
 	"github.com/adshao/go-binance/v2/futures"
 )
 
@@ -44,7 +47,22 @@ func getBrOrderID() string {
 
 // FuturesTrader 币安合约交易器
 type FuturesTrader struct {
-	client *futures.Client
+	protectionRulesMu sync.Mutex
+	protectionSteps   map[string]string
+	protectionRulesAt time.Time
+	client            *futures.Client
+	clockMutex        sync.Mutex
+	lastClockSync     time.Time
+	readMutex         sync.Mutex
+	readRetryAt       time.Time
+	readBlockedBy     error
+	positionFeedMu    sync.Mutex
+	positionFeed      *positionFeed
+	balanceFetchMu    sync.Mutex
+	positionsFetchMu  sync.Mutex
+	historyMu         sync.Mutex
+	historyCache      map[int]*TradingHistory
+	historyVersion    atomic.Uint64
 
 	// 余额缓存
 	cachedBalance     map[string]interface{}
@@ -52,9 +70,11 @@ type FuturesTrader struct {
 	balanceCacheMutex sync.RWMutex
 
 	// 持仓缓存
-	cachedPositions     []map[string]interface{}
-	positionsCacheTime  time.Time
-	positionsCacheMutex sync.RWMutex
+	cachedPositions       []map[string]interface{}
+	positionsCacheTime    time.Time
+	positionsObservedAt   time.Time
+	positionsCacheVersion uint64
+	positionsCacheMutex   sync.RWMutex
 
 	// 缓存有效期（15秒）
 	cacheDuration time.Duration
@@ -64,9 +84,12 @@ type FuturesTrader struct {
 func NewFuturesTrader(apiKey, secretKey string) *FuturesTrader {
 	client := futures.NewClient(apiKey, secretKey)
 	// 同步时间，避免 Timestamp ahead 错误
-	syncBinanceServerTime(client)
+	if err := syncBinanceServerTime(client); err != nil {
+		log.Printf("⚠️ %v", err)
+	}
 	trader := &FuturesTrader{
 		client:        client,
+		lastClockSync: time.Now(),
 		cacheDuration: 15 * time.Second, // 15秒缓存
 	}
 
@@ -81,10 +104,12 @@ func NewFuturesTrader(apiKey, secretKey string) *FuturesTrader {
 
 // setDualSidePosition 设置双向持仓模式（初始化时调用）
 func (t *FuturesTrader) setDualSidePosition() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
 	// 尝试设置双向持仓模式
-	err := t.client.NewChangePositionModeService().
+	err := t.binanceClient().NewChangePositionModeService().
 		DualSide(true). // true = 双向持仓（Hedge Mode）
-		Do(context.Background())
+		Do(ctx)
 
 	if err != nil {
 		// 如果错误信息包含"No need to change"，说明已经是双向持仓模式
@@ -102,34 +127,128 @@ func (t *FuturesTrader) setDualSidePosition() error {
 }
 
 // syncBinanceServerTime 同步币安服务器时间，确保请求时间戳合法
-func syncBinanceServerTime(client *futures.Client) {
-	serverTime, err := client.NewServerTimeService().Do(context.Background())
+func syncBinanceServerTime(client *futures.Client) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	serverTime, err := client.NewServerTimeService().Do(ctx)
 	if err != nil {
-		log.Printf("⚠️ 同步币安服务器时间失败: %v", err)
-		return
+		return fmt.Errorf("同步币安服务器时间失败: %w", err)
 	}
+	// Estimate the local time at the server response using the round-trip midpoint.
+	client.TimeOffset = start.UnixMilli() + time.Since(start).Milliseconds()/2 - serverTime
+	return nil
+}
 
-	now := time.Now().UnixMilli()
-	offset := now - serverTime
-	client.TimeOffset = offset
-	log.Printf("⏱ 已同步币安服务器时间，偏移 %dms", offset)
+// Each request gets its own client so periodic clock updates cannot race with signing.
+func (t *FuturesTrader) binanceClient() *futures.Client {
+	t.clockMutex.Lock()
+	c := futures.NewClient(t.client.APIKey, t.client.SecretKey)
+	c.BaseURL, c.HTTPClient = t.client.BaseURL, t.client.HTTPClient
+	c.KeyType, c.UserAgent = t.client.KeyType, t.client.UserAgent
+	c.TimeOffset = t.client.TimeOffset
+	shouldSync := time.Since(t.lastClockSync) >= time.Minute
+	if shouldSync {
+		t.lastClockSync = time.Now()
+	}
+	t.clockMutex.Unlock()
+	if shouldSync {
+		if err := syncBinanceServerTime(c); err != nil {
+			log.Printf("⚠️ %v", err)
+		} else {
+			t.clockMutex.Lock()
+			t.client.TimeOffset = c.TimeOffset
+			t.clockMutex.Unlock()
+		}
+	}
+	return c
+}
+
+// Only read-only requests are retried. Never replay an order after an uncertain response.
+func binanceRead[T any](t *FuturesTrader, read func(*futures.Client, context.Context) (T, error)) (T, error) {
+	return binanceReadContext(context.Background(), t, read)
+}
+
+func binanceReadContext[T any](parent context.Context, t *FuturesTrader, read func(*futures.Client, context.Context) (T, error)) (T, error) {
+	// Only guard rejection state. A slow balance request must not block position
+	// snapshots, stream renewal or history requests behind a network-held mutex.
+	if err := t.binanceReadUnavailable(); err != nil {
+		var zero T
+		return zero, err
+	}
+	c := t.binanceClient()
+	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
+	defer cancel()
+	result, err := read(c, ctx)
+	if isBinanceLocationRestricted(err) {
+		t.readMutex.Lock()
+		defer t.readMutex.Unlock()
+		t.readBlockedBy, t.readRetryAt = err, time.Now().Add(time.Minute)
+		return result, t.binanceReadUnavailableLocked()
+	}
+	var apiErr *common.APIError
+	if !errors.As(err, &apiErr) || apiErr.Code != -1021 {
+		return result, err
+	}
+	if syncErr := syncBinanceServerTime(c); syncErr != nil {
+		return result, fmt.Errorf("%w; %v", err, syncErr)
+	}
+	t.clockMutex.Lock()
+	t.client.TimeOffset, t.lastClockSync = c.TimeOffset, time.Now()
+	t.clockMutex.Unlock()
+	retryCtx, retryCancel := context.WithTimeout(parent, 15*time.Second)
+	defer retryCancel()
+	result, err = read(c, retryCtx)
+	if isBinanceLocationRestricted(err) {
+		t.readMutex.Lock()
+		defer t.readMutex.Unlock()
+		t.readBlockedBy, t.readRetryAt = err, time.Now().Add(time.Minute)
+		return result, t.binanceReadUnavailableLocked()
+	}
+	return result, err
+}
+
+func isBinanceLocationRestricted(err error) bool {
+	var apiErr *common.APIError
+	return errors.As(err, &apiErr) && strings.Contains(strings.ToLower(apiErr.Message+string(apiErr.Response)), "restricted location")
+}
+
+func (t *FuturesTrader) binanceReadUnavailableLocked() error {
+	if t.readBlockedBy == nil || !time.Now().Before(t.readRetryAt) {
+		return nil
+	}
+	return fmt.Errorf("币安拒绝当前连接的访问地区；账户数据不可用，暂停新的自动交易决策，%s后重新检查。请确认账户及所在地符合币安服务条件；如属误判，请联系币安客服。原始错误: %w", t.readRetryAt.Format("15:04:05"), t.readBlockedBy)
+}
+
+func (t *FuturesTrader) binanceReadUnavailable() error {
+	t.readMutex.Lock()
+	defer t.readMutex.Unlock()
+	return t.binanceReadUnavailableLocked()
 }
 
 // GetBalance 获取账户余额（带缓存）
 func (t *FuturesTrader) GetBalance() (map[string]interface{}, error) {
+	t.balanceFetchMu.Lock()
+	defer t.balanceFetchMu.Unlock()
+	if err := t.binanceReadUnavailable(); err != nil {
+		return nil, err
+	}
 	// 先检查缓存是否有效
 	t.balanceCacheMutex.RLock()
 	if t.cachedBalance != nil && time.Since(t.balanceCacheTime) < t.cacheDuration {
 		cacheAge := time.Since(t.balanceCacheTime)
+		cached := t.cachedBalance
 		t.balanceCacheMutex.RUnlock()
 		log.Printf("✓ 使用缓存的账户余额（缓存时间: %.1f秒前）", cacheAge.Seconds())
-		return t.cachedBalance, nil
+		return cached, nil
 	}
 	t.balanceCacheMutex.RUnlock()
 
 	// 缓存过期或不存在，调用API
 	log.Printf("🔄 缓存过期，正在调用币安API获取账户余额...")
-	account, err := t.client.NewGetAccountService().Do(context.Background())
+	account, err := binanceRead(t, func(c *futures.Client, ctx context.Context) (*futures.Account, error) {
+		return c.NewGetAccountService().Do(ctx)
+	})
 	if err != nil {
 		log.Printf("❌ 币安API调用失败: %v", err)
 		return nil, fmt.Errorf("获取账户信息失败: %w", err)
@@ -156,24 +275,69 @@ func (t *FuturesTrader) GetBalance() (map[string]interface{}, error) {
 
 // GetPositions 获取所有持仓（带缓存）
 func (t *FuturesTrader) GetPositions() ([]map[string]interface{}, error) {
+	positions, _, err := t.GetPositionsSnapshot()
+	return positions, err
+}
+
+var errPositionSnapshotChanged = errors.New("持仓已发生变化，需要重新获取快照")
+
+func (t *FuturesTrader) invalidatePositionCaches() {
+	t.historyVersion.Add(1)
+	t.positionsCacheMutex.Lock()
+	t.positionsCacheTime = time.Time{}
+	t.positionsCacheVersion++
+	t.positionsCacheMutex.Unlock()
+	t.balanceCacheMutex.Lock()
+	t.balanceCacheTime = time.Time{}
+	t.balanceCacheMutex.Unlock()
+}
+
+// Return the observation time together with rows, so a delayed cached HTTP
+// response cannot overwrite a more recent ACCOUNT_UPDATE in the browser.
+func (t *FuturesTrader) GetPositionsSnapshot() ([]map[string]interface{}, time.Time, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		positions, observedAt, err := t.getPositionsSnapshot()
+		if !errors.Is(err, errPositionSnapshotChanged) {
+			return positions, observedAt, err
+		}
+	}
+	return nil, time.Time{}, errPositionSnapshotChanged
+}
+
+func (t *FuturesTrader) getPositionsSnapshot() ([]map[string]interface{}, time.Time, error) {
+	t.positionsFetchMu.Lock()
+	defer t.positionsFetchMu.Unlock()
+	if err := t.binanceReadUnavailable(); err != nil {
+		return nil, time.Time{}, err
+	}
 	// 先检查缓存是否有效
 	t.positionsCacheMutex.RLock()
-	if t.cachedPositions != nil && time.Since(t.positionsCacheTime) < t.cacheDuration {
+	if t.cachedPositions != nil && time.Since(t.positionsCacheTime) < min(t.cacheDuration, 5*time.Second) {
 		cacheAge := time.Since(t.positionsCacheTime)
+		cached := t.cachedPositions
+		observedAt := t.positionsObservedAt
+		if observedAt.IsZero() {
+			observedAt = t.positionsCacheTime
+		}
 		t.positionsCacheMutex.RUnlock()
 		log.Printf("✓ 使用缓存的持仓信息（缓存时间: %.1f秒前）", cacheAge.Seconds())
-		return t.cachedPositions, nil
+		return cached, observedAt, nil
 	}
+	version := t.positionsCacheVersion
 	t.positionsCacheMutex.RUnlock()
 
 	// 缓存过期或不存在，调用API
 	log.Printf("🔄 缓存过期，正在调用币安API获取持仓信息...")
-	positions, err := t.client.NewGetPositionRiskService().Do(context.Background())
+	var observedAt time.Time
+	positions, err := binanceRead(t, func(c *futures.Client, ctx context.Context) ([]*futures.PositionRisk, error) {
+		observedAt = time.Now().Add(-time.Duration(c.TimeOffset) * time.Millisecond)
+		return c.NewGetPositionRiskService().Do(ctx)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("获取持仓失败: %w", err)
+		return nil, time.Time{}, fmt.Errorf("获取持仓失败: %w", err)
 	}
 
-	var result []map[string]interface{}
+	result := make([]map[string]interface{}, 0, len(positions))
 	for _, pos := range positions {
 		posAmt, _ := strconv.ParseFloat(pos.PositionAmt, 64)
 		if posAmt == 0 {
@@ -201,11 +365,16 @@ func (t *FuturesTrader) GetPositions() ([]map[string]interface{}, error) {
 
 	// 更新缓存
 	t.positionsCacheMutex.Lock()
+	if version != t.positionsCacheVersion {
+		t.positionsCacheMutex.Unlock()
+		return nil, time.Time{}, errPositionSnapshotChanged
+	}
 	t.cachedPositions = result
 	t.positionsCacheTime = time.Now()
+	t.positionsObservedAt = observedAt
 	t.positionsCacheMutex.Unlock()
 
-	return result, nil
+	return result, observedAt, nil
 }
 
 // SetMarginMode 设置仓位模式
@@ -218,7 +387,7 @@ func (t *FuturesTrader) SetMarginMode(symbol string, isCrossMargin bool) error {
 	}
 
 	// 尝试设置仓位模式
-	err := t.client.NewChangeMarginTypeService().
+	err := t.binanceClient().NewChangeMarginTypeService().
 		Symbol(symbol).
 		MarginType(marginType).
 		Do(context.Background())
@@ -282,7 +451,7 @@ func (t *FuturesTrader) SetLeverage(symbol string, leverage int) error {
 	}
 
 	// 切换杠杆
-	_, err = t.client.NewChangeLeverageService().
+	_, err = t.binanceClient().NewChangeLeverageService().
 		Symbol(symbol).
 		Leverage(leverage).
 		Do(context.Background())
@@ -309,7 +478,7 @@ func (t *FuturesTrader) SetLeverage(symbol string, leverage int) error {
 func (t *FuturesTrader) OpenLong(symbol string, quantity float64, leverage int) (map[string]interface{}, error) {
 	// 先取消该币种的所有委托单（清理旧的止损止盈单）
 	if err := t.CancelAllOrders(symbol); err != nil {
-		log.Printf("  ⚠ 取消旧委托单失败（可能没有委托单）: %v", err)
+		return nil, fmt.Errorf("开仓前无法确认旧委托已清理: %w", err)
 	}
 
 	// 设置杠杆
@@ -337,11 +506,12 @@ func (t *FuturesTrader) OpenLong(symbol string, quantity float64, leverage int) 
 	}
 
 	// 创建市价买入订单（使用br ID）
-	order, err := t.client.NewCreateOrderService().
+	order, err := t.binanceClient().NewCreateOrderService().
 		Symbol(symbol).
 		Side(futures.SideTypeBuy).
 		PositionSide(futures.PositionSideTypeLong).
 		Type(futures.OrderTypeMarket).
+		NewOrderResponseType(futures.NewOrderRespTypeRESULT).
 		Quantity(quantityStr).
 		NewClientOrderID(getBrOrderID()).
 		Do(context.Background())
@@ -357,6 +527,9 @@ func (t *FuturesTrader) OpenLong(symbol string, quantity float64, leverage int) 
 	result["orderId"] = order.OrderID
 	result["symbol"] = order.Symbol
 	result["status"] = order.Status
+	result["executedQty"], _ = strconv.ParseFloat(order.ExecutedQuantity, 64)
+	result["avgPrice"], _ = strconv.ParseFloat(order.AvgPrice, 64)
+	t.invalidatePositionCaches()
 	return result, nil
 }
 
@@ -364,7 +537,7 @@ func (t *FuturesTrader) OpenLong(symbol string, quantity float64, leverage int) 
 func (t *FuturesTrader) OpenShort(symbol string, quantity float64, leverage int) (map[string]interface{}, error) {
 	// 先取消该币种的所有委托单（清理旧的止损止盈单）
 	if err := t.CancelAllOrders(symbol); err != nil {
-		log.Printf("  ⚠ 取消旧委托单失败（可能没有委托单）: %v", err)
+		return nil, fmt.Errorf("开仓前无法确认旧委托已清理: %w", err)
 	}
 
 	// 设置杠杆
@@ -392,11 +565,12 @@ func (t *FuturesTrader) OpenShort(symbol string, quantity float64, leverage int)
 	}
 
 	// 创建市价卖出订单（使用br ID）
-	order, err := t.client.NewCreateOrderService().
+	order, err := t.binanceClient().NewCreateOrderService().
 		Symbol(symbol).
 		Side(futures.SideTypeSell).
 		PositionSide(futures.PositionSideTypeShort).
 		Type(futures.OrderTypeMarket).
+		NewOrderResponseType(futures.NewOrderRespTypeRESULT).
 		Quantity(quantityStr).
 		NewClientOrderID(getBrOrderID()).
 		Do(context.Background())
@@ -412,6 +586,9 @@ func (t *FuturesTrader) OpenShort(symbol string, quantity float64, leverage int)
 	result["orderId"] = order.OrderID
 	result["symbol"] = order.Symbol
 	result["status"] = order.Status
+	result["executedQty"], _ = strconv.ParseFloat(order.ExecutedQuantity, 64)
+	result["avgPrice"], _ = strconv.ParseFloat(order.AvgPrice, 64)
+	t.invalidatePositionCaches()
 	return result, nil
 }
 
@@ -443,17 +620,23 @@ func (t *FuturesTrader) CloseLong(symbol string, quantity float64) (map[string]i
 	}
 
 	// 创建市价卖出订单（平多，使用br ID）
-	order, err := t.client.NewCreateOrderService().
+	order, err := t.binanceClient().NewCreateOrderService().
 		Symbol(symbol).
 		Side(futures.SideTypeSell).
 		PositionSide(futures.PositionSideTypeLong).
 		Type(futures.OrderTypeMarket).
+		NewOrderResponseType(futures.NewOrderRespTypeRESULT).
 		Quantity(quantityStr).
 		NewClientOrderID(getBrOrderID()).
 		Do(context.Background())
 
 	if err != nil {
 		return nil, fmt.Errorf("平多仓失败: %w", err)
+	}
+
+	if order.Status != futures.OrderStatusTypeFilled {
+		t.invalidatePositionCaches()
+		return nil, fmt.Errorf("平仓尚未完全成交，状态:%s", order.Status)
 	}
 
 	log.Printf("✓ 平多仓成功: %s 数量: %s", symbol, quantityStr)
@@ -467,6 +650,9 @@ func (t *FuturesTrader) CloseLong(symbol string, quantity float64) (map[string]i
 	result["orderId"] = order.OrderID
 	result["symbol"] = order.Symbol
 	result["status"] = order.Status
+	result["executedQty"], _ = strconv.ParseFloat(order.ExecutedQuantity, 64)
+	result["avgPrice"], _ = strconv.ParseFloat(order.AvgPrice, 64)
+	t.invalidatePositionCaches()
 	return result, nil
 }
 
@@ -498,17 +684,23 @@ func (t *FuturesTrader) CloseShort(symbol string, quantity float64) (map[string]
 	}
 
 	// 创建市价买入订单（平空，使用br ID）
-	order, err := t.client.NewCreateOrderService().
+	order, err := t.binanceClient().NewCreateOrderService().
 		Symbol(symbol).
 		Side(futures.SideTypeBuy).
 		PositionSide(futures.PositionSideTypeShort).
 		Type(futures.OrderTypeMarket).
+		NewOrderResponseType(futures.NewOrderRespTypeRESULT).
 		Quantity(quantityStr).
 		NewClientOrderID(getBrOrderID()).
 		Do(context.Background())
 
 	if err != nil {
 		return nil, fmt.Errorf("平空仓失败: %w", err)
+	}
+
+	if order.Status != futures.OrderStatusTypeFilled {
+		t.invalidatePositionCaches()
+		return nil, fmt.Errorf("平仓尚未完全成交，状态:%s", order.Status)
 	}
 
 	log.Printf("✓ 平空仓成功: %s 数量: %s", symbol, quantityStr)
@@ -522,13 +714,19 @@ func (t *FuturesTrader) CloseShort(symbol string, quantity float64) (map[string]
 	result["orderId"] = order.OrderID
 	result["symbol"] = order.Symbol
 	result["status"] = order.Status
+	result["executedQty"], _ = strconv.ParseFloat(order.ExecutedQuantity, 64)
+	result["avgPrice"], _ = strconv.ParseFloat(order.AvgPrice, 64)
+	t.invalidatePositionCaches()
 	return result, nil
 }
 
 // CancelStopLossOrders 仅取消止损单（不影响止盈单）
 func (t *FuturesTrader) CancelStopLossOrders(symbol string) error {
+	if err := t.cancelProtectionAlgos(symbol, "STOP_MARKET"); err != nil {
+		return fmt.Errorf("取消条件保护单失败: %w", err)
+	}
 	// 获取该币种的所有未完成订单
-	orders, err := t.client.NewListOpenOrdersService().
+	orders, err := t.binanceClient().NewListOpenOrdersService().
 		Symbol(symbol).
 		Do(context.Background())
 
@@ -544,7 +742,7 @@ func (t *FuturesTrader) CancelStopLossOrders(symbol string) error {
 
 		// 只取消止损订单（不取消止盈订单）
 		if orderType == futures.OrderTypeStopMarket || orderType == futures.OrderTypeStop {
-			_, err := t.client.NewCancelOrderService().
+			_, err := t.binanceClient().NewCancelOrderService().
 				Symbol(symbol).
 				OrderID(order.OrderID).
 				Do(context.Background())
@@ -577,8 +775,11 @@ func (t *FuturesTrader) CancelStopLossOrders(symbol string) error {
 
 // CancelTakeProfitOrders 仅取消止盈单（不影响止损单）
 func (t *FuturesTrader) CancelTakeProfitOrders(symbol string) error {
+	if err := t.cancelProtectionAlgos(symbol, "TAKE_PROFIT_MARKET"); err != nil {
+		return fmt.Errorf("取消条件保护单失败: %w", err)
+	}
 	// 获取该币种的所有未完成订单
-	orders, err := t.client.NewListOpenOrdersService().
+	orders, err := t.binanceClient().NewListOpenOrdersService().
 		Symbol(symbol).
 		Do(context.Background())
 
@@ -594,7 +795,7 @@ func (t *FuturesTrader) CancelTakeProfitOrders(symbol string) error {
 
 		// 只取消止盈订单（不取消止损订单）
 		if orderType == futures.OrderTypeTakeProfitMarket || orderType == futures.OrderTypeTakeProfit {
-			_, err := t.client.NewCancelOrderService().
+			_, err := t.binanceClient().NewCancelOrderService().
 				Symbol(symbol).
 				OrderID(order.OrderID).
 				Do(context.Background())
@@ -627,7 +828,10 @@ func (t *FuturesTrader) CancelTakeProfitOrders(symbol string) error {
 
 // CancelAllOrders 取消该币种的所有挂单
 func (t *FuturesTrader) CancelAllOrders(symbol string) error {
-	err := t.client.NewCancelAllOpenOrdersService().
+	if err := t.cancelProtectionAlgos(symbol, ""); err != nil {
+		return fmt.Errorf("取消条件保护单失败: %w", err)
+	}
+	err := t.binanceClient().NewCancelAllOpenOrdersService().
 		Symbol(symbol).
 		Do(context.Background())
 
@@ -641,8 +845,11 @@ func (t *FuturesTrader) CancelAllOrders(symbol string) error {
 
 // CancelStopOrders 取消该币种的止盈/止损单（用于调整止盈止损位置）
 func (t *FuturesTrader) CancelStopOrders(symbol string) error {
+	if err := t.cancelProtectionAlgos(symbol, ""); err != nil {
+		return fmt.Errorf("取消条件保护单失败: %w", err)
+	}
 	// 获取该币种的所有未完成订单
-	orders, err := t.client.NewListOpenOrdersService().
+	orders, err := t.binanceClient().NewListOpenOrdersService().
 		Symbol(symbol).
 		Do(context.Background())
 
@@ -661,7 +868,7 @@ func (t *FuturesTrader) CancelStopOrders(symbol string) error {
 			orderType == futures.OrderTypeStop ||
 			orderType == futures.OrderTypeTakeProfit {
 
-			_, err := t.client.NewCancelOrderService().
+			_, err := t.binanceClient().NewCancelOrderService().
 				Symbol(symbol).
 				OrderID(order.OrderID).
 				Do(context.Background())
@@ -688,7 +895,7 @@ func (t *FuturesTrader) CancelStopOrders(symbol string) error {
 
 // GetMarketPrice 获取市场价格
 func (t *FuturesTrader) GetMarketPrice(symbol string) (float64, error) {
-	prices, err := t.client.NewListPricesService().Symbol(symbol).Do(context.Background())
+	prices, err := t.binanceClient().NewListPricesService().Symbol(symbol).Do(context.Background())
 	if err != nil {
 		return 0, fmt.Errorf("获取价格失败: %w", err)
 	}
@@ -713,80 +920,14 @@ func (t *FuturesTrader) CalculatePositionSize(balance, riskPercent, price float6
 	return quantity
 }
 
-// SetStopLoss 设置止损单
-func (t *FuturesTrader) SetStopLoss(symbol string, positionSide string, quantity, stopPrice float64) error {
-	var side futures.SideType
-	var posSide futures.PositionSideType
-
-	if positionSide == "LONG" {
-		side = futures.SideTypeSell
-		posSide = futures.PositionSideTypeLong
-	} else {
-		side = futures.SideTypeBuy
-		posSide = futures.PositionSideTypeShort
-	}
-
-	// 格式化数量
-	quantityStr, err := t.FormatQuantity(symbol, quantity)
-	if err != nil {
-		return err
-	}
-
-	_, err = t.client.NewCreateOrderService().
-		Symbol(symbol).
-		Side(side).
-		PositionSide(posSide).
-		Type(futures.OrderTypeStopMarket).
-		StopPrice(fmt.Sprintf("%.8f", stopPrice)).
-		Quantity(quantityStr).
-		WorkingType(futures.WorkingTypeContractPrice).
-		ClosePosition(true).
-		Do(context.Background())
-
-	if err != nil {
-		return fmt.Errorf("设置止损失败: %w", err)
-	}
-
-	log.Printf("  止损价设置: %.4f", stopPrice)
-	return nil
+// SetStopLoss submits and confirms a close-all conditional stop at Binance.
+func (t *FuturesTrader) SetStopLoss(symbol, positionSide string, quantity, stopPrice float64) error {
+	return t.setProtection(symbol, positionSide, "STOP_MARKET", stopPrice)
 }
 
-// SetTakeProfit 设置止盈单
-func (t *FuturesTrader) SetTakeProfit(symbol string, positionSide string, quantity, takeProfitPrice float64) error {
-	var side futures.SideType
-	var posSide futures.PositionSideType
-
-	if positionSide == "LONG" {
-		side = futures.SideTypeSell
-		posSide = futures.PositionSideTypeLong
-	} else {
-		side = futures.SideTypeBuy
-		posSide = futures.PositionSideTypeShort
-	}
-
-	// 格式化数量
-	quantityStr, err := t.FormatQuantity(symbol, quantity)
-	if err != nil {
-		return err
-	}
-
-	_, err = t.client.NewCreateOrderService().
-		Symbol(symbol).
-		Side(side).
-		PositionSide(posSide).
-		Type(futures.OrderTypeTakeProfitMarket).
-		StopPrice(fmt.Sprintf("%.8f", takeProfitPrice)).
-		Quantity(quantityStr).
-		WorkingType(futures.WorkingTypeContractPrice).
-		ClosePosition(true).
-		Do(context.Background())
-
-	if err != nil {
-		return fmt.Errorf("设置止盈失败: %w", err)
-	}
-
-	log.Printf("  止盈价设置: %.4f", takeProfitPrice)
-	return nil
+// SetTakeProfit submits and confirms a close-all conditional take-profit.
+func (t *FuturesTrader) SetTakeProfit(symbol, positionSide string, quantity, takeProfitPrice float64) error {
+	return t.setProtection(symbol, positionSide, "TAKE_PROFIT_MARKET", takeProfitPrice)
 }
 
 // GetMinNotional 获取最小名义价值（Binance要求）
@@ -817,7 +958,7 @@ func (t *FuturesTrader) CheckMinNotional(symbol string, quantity float64) error 
 
 // GetSymbolPrecision 获取交易对的数量精度
 func (t *FuturesTrader) GetSymbolPrecision(symbol string) (int, error) {
-	exchangeInfo, err := t.client.NewExchangeInfoService().Do(context.Background())
+	exchangeInfo, err := t.binanceClient().NewExchangeInfoService().Do(context.Background())
 	if err != nil {
 		return 0, fmt.Errorf("获取交易规则失败: %w", err)
 	}

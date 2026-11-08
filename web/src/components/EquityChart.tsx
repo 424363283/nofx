@@ -1,3 +1,4 @@
+import { UiCard, UiButton } from './design/Controls'
 import { useState } from 'react'
 import {
   LineChart,
@@ -32,9 +33,10 @@ interface EquityPoint {
 
 interface EquityChartProps {
   traderId?: string
+  compact?: boolean
 }
 
-export function EquityChart({ traderId }: EquityChartProps) {
+export function EquityChart({ traderId, compact = false }: EquityChartProps) {
   const { language } = useLanguage()
   const [displayMode, setDisplayMode] = useState<'dollar' | 'percent'>('dollar')
 
@@ -60,7 +62,7 @@ export function EquityChart({ traderId }: EquityChartProps) {
 
   if (error) {
     return (
-      <div className="binance-card p-6">
+      <UiCard className="binance-card p-6">
         <div
           className="flex items-center gap-3 p-4 rounded"
           style={{
@@ -68,17 +70,23 @@ export function EquityChart({ traderId }: EquityChartProps) {
             border: '1px solid rgba(246, 70, 93, 0.2)',
           }}
         >
-          <AlertTriangle className="w-6 h-6" style={{ color: '#F6465D' }} />
+          <AlertTriangle
+            className="w-6 h-6"
+            style={{ color: 'var(--binance-red)' }}
+          />
           <div>
-            <div className="font-semibold" style={{ color: '#F6465D' }}>
+            <div
+              className="font-semibold"
+              style={{ color: 'var(--binance-red)' }}
+            >
               {t('loadingError', language)}
             </div>
-            <div className="text-sm" style={{ color: '#848E9C' }}>
+            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               {error.message}
             </div>
           </div>
         </div>
-      </div>
+      </UiCard>
     )
   }
 
@@ -87,11 +95,17 @@ export function EquityChart({ traderId }: EquityChartProps) {
 
   if (!validHistory || validHistory.length === 0) {
     return (
-      <div className="binance-card p-6">
-        <h3 className="text-lg font-semibold mb-6" style={{ color: '#EAECEF' }}>
+      <UiCard className="binance-card p-6">
+        <h3
+          className="text-lg font-semibold mb-6"
+          style={{ color: 'var(--foreground)' }}
+        >
           {t('accountEquityCurve', language)}
         </h3>
-        <div className="text-center py-16" style={{ color: '#848E9C' }}>
+        <div
+          className="text-center py-16"
+          style={{ color: 'var(--text-secondary)' }}
+        >
           <div className="mb-4 flex justify-center opacity-50">
             <BarChart3 className="w-16 h-16" />
           </div>
@@ -100,7 +114,7 @@ export function EquityChart({ traderId }: EquityChartProps) {
           </div>
           <div className="text-sm">{t('dataWillAppear', language)}</div>
         </div>
-      </div>
+      </UiCard>
     )
   }
 
@@ -168,17 +182,31 @@ export function EquityChart({ traderId }: EquityChartProps) {
       return (
         <div
           className="rounded p-3 shadow-xl"
-          style={{ background: '#1E2329', border: '1px solid #2B3139' }}
+          style={{
+            background: 'var(--panel-bg)',
+            border: '1px solid var(--panel-border)',
+          }}
         >
-          <div className="text-xs mb-1" style={{ color: '#848E9C' }}>
+          <div
+            className="text-xs mb-1"
+            style={{ color: 'var(--text-secondary)' }}
+          >
             Cycle #{data.cycle}
           </div>
-          <div className="font-bold mono" style={{ color: '#EAECEF' }}>
+          <div
+            className="font-bold mono"
+            style={{ color: 'var(--foreground)' }}
+          >
             {data.raw_equity.toFixed(2)} USDT
           </div>
           <div
             className="text-sm mono font-bold"
-            style={{ color: data.raw_pnl >= 0 ? '#0ECB81' : '#F6465D' }}
+            style={{
+              color:
+                data.raw_pnl >= 0
+                  ? 'var(--binance-green)'
+                  : 'var(--binance-red)',
+            }}
           >
             {data.raw_pnl >= 0 ? '+' : ''}
             {data.raw_pnl.toFixed(2)} USDT ({data.raw_pnl_pct >= 0 ? '+' : ''}
@@ -191,98 +219,105 @@ export function EquityChart({ traderId }: EquityChartProps) {
   }
 
   return (
-    <div className="binance-card p-3 sm:p-5 animate-fade-in">
+    <UiCard className="binance-card p-3 sm:p-5 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div className="flex-1">
           <h3
             className="text-base sm:text-lg font-bold mb-2"
-            style={{ color: '#EAECEF' }}
+            style={{ color: 'var(--foreground)' }}
           >
             {t('accountEquityCurve', language)}
           </h3>
-          <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
-            <span
-              className="text-2xl sm:text-3xl font-bold mono"
-              style={{ color: '#EAECEF' }}
-            >
-              {account?.total_equity.toFixed(2) || '0.00'}
+          {!compact && (
+            <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
               <span
-                className="text-base sm:text-lg ml-1"
-                style={{ color: '#848E9C' }}
+                className="text-2xl sm:text-3xl font-bold mono"
+                style={{ color: 'var(--foreground)' }}
               >
-                USDT
+                {account?.total_equity.toFixed(2) || '0.00'}
+                <span
+                  className="text-base sm:text-lg ml-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  USDT
+                </span>
               </span>
-            </span>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span
-                className="text-sm sm:text-lg font-bold mono px-2 sm:px-3 py-1 rounded flex items-center gap-1"
-                style={{
-                  color: isProfit ? '#0ECB81' : '#F6465D',
-                  background: isProfit
-                    ? 'rgba(14, 203, 129, 0.1)'
-                    : 'rgba(246, 70, 93, 0.1)',
-                  border: `1px solid ${
-                    isProfit
-                      ? 'rgba(14, 203, 129, 0.2)'
-                      : 'rgba(246, 70, 93, 0.2)'
-                  }`,
-                }}
-              >
-                {isProfit ? (
-                  <ArrowUp className="w-4 h-4" />
-                ) : (
-                  <ArrowDown className="w-4 h-4" />
-                )}
-                {isProfit ? '+' : ''}
-                {currentValue.raw_pnl_pct}%
-              </span>
-              <span
-                className="text-xs sm:text-sm mono"
-                style={{ color: '#848E9C' }}
-              >
-                ({isProfit ? '+' : ''}
-                {currentValue.raw_pnl.toFixed(2)} USDT)
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className="text-sm sm:text-lg font-bold mono px-2 sm:px-3 py-1 rounded flex items-center gap-1"
+                  style={{
+                    color: isProfit
+                      ? 'var(--binance-green)'
+                      : 'var(--binance-red)',
+                    background: isProfit
+                      ? 'rgba(14, 203, 129, 0.1)'
+                      : 'rgba(246, 70, 93, 0.1)',
+                    border: `1px solid ${
+                      isProfit
+                        ? 'rgba(14, 203, 129, 0.2)'
+                        : 'rgba(246, 70, 93, 0.2)'
+                    }`,
+                  }}
+                >
+                  {isProfit ? (
+                    <ArrowUp className="w-4 h-4" />
+                  ) : (
+                    <ArrowDown className="w-4 h-4" />
+                  )}
+                  {isProfit ? '+' : ''}
+                  {currentValue.raw_pnl_pct}%
+                </span>
+                <span
+                  className="text-xs sm:text-sm mono"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  ({isProfit ? '+' : ''}
+                  {currentValue.raw_pnl.toFixed(2)} USDT)
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Display Mode Toggle */}
         <div
           className="flex gap-0.5 sm:gap-1 rounded p-0.5 sm:p-1 self-start sm:self-auto"
-          style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
+          style={{
+            background: 'var(--background)',
+            border: '1px solid var(--panel-border)',
+          }}
         >
-          <button
+          <UiButton
             onClick={() => setDisplayMode('dollar')}
             className="px-3 sm:px-4 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-bold transition-all flex items-center gap-1"
             style={
               displayMode === 'dollar'
                 ? {
-                    background: '#F0B90B',
+                    background: 'var(--binance-yellow)',
                     color: '#000',
-                    boxShadow: '0 2px 8px rgba(240, 185, 11, 0.4)',
+                    boxShadow: '0 2px 8px rgba(52, 211, 153, 0.4)',
                   }
-                : { background: 'transparent', color: '#848E9C' }
+                : { background: 'transparent', color: 'var(--text-secondary)' }
             }
           >
             <DollarSign className="w-4 h-4" /> USDT
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             onClick={() => setDisplayMode('percent')}
             className="px-3 sm:px-4 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-bold transition-all flex items-center gap-1"
             style={
               displayMode === 'percent'
                 ? {
-                    background: '#F0B90B',
+                    background: 'var(--binance-yellow)',
                     color: '#000',
-                    boxShadow: '0 2px 8px rgba(240, 185, 11, 0.4)',
+                    boxShadow: '0 2px 8px rgba(52, 211, 153, 0.4)',
                   }
-                : { background: 'transparent', color: '#848E9C' }
+                : { background: 'transparent', color: 'var(--text-secondary)' }
             }
           >
             <Percent className="w-4 h-4" />
-          </button>
+          </UiButton>
         </div>
       </div>
 
@@ -295,22 +330,8 @@ export function EquityChart({ traderId }: EquityChartProps) {
           position: 'relative',
         }}
       >
-        {/* NOFX Watermark */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '15px',
-            right: '15px',
-            fontSize: '20px',
-            fontWeight: 'bold',
-            color: 'rgba(240, 185, 11, 0.15)',
-            zIndex: 10,
-            pointerEvents: 'none',
-            fontFamily: 'monospace',
-          }}
-        >
-          NOFX
-        </div>
+        {/* terminal Watermark */}
+
         <ResponsiveContainer width="100%" height={280}>
           <LineChart
             data={chartData}
@@ -318,25 +339,34 @@ export function EquityChart({ traderId }: EquityChartProps) {
           >
             <defs>
               <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#F0B90B" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="#FCD535" stopOpacity={0.2} />
+                <stop
+                  offset="5%"
+                  stopColor="var(--binance-yellow)"
+                  stopOpacity={0.8}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--binance-yellow-light)"
+                  stopOpacity={0.2}
+                />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2B3139" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" />
             <XAxis
               dataKey="time"
               stroke="#5E6673"
-              tick={{ fill: '#848E9C', fontSize: 11 }}
-              tickLine={{ stroke: '#2B3139' }}
-              interval={Math.floor(chartData.length / 10)}
-              angle={-15}
-              textAnchor="end"
+              tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+              tickLine={{ stroke: 'var(--panel-border)' }}
+              interval="preserveStartEnd"
+              minTickGap={36}
+              angle={0}
+              textAnchor="middle"
               height={60}
             />
             <YAxis
               stroke="#5E6673"
-              tick={{ fill: '#848E9C', fontSize: 12 }}
-              tickLine={{ stroke: '#2B3139' }}
+              tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+              tickLine={{ stroke: 'var(--panel-border)' }}
               domain={calculateYDomain()}
               tickFormatter={(value) =>
                 displayMode === 'dollar' ? `$${value.toFixed(0)}` : `${value}%`
@@ -345,14 +375,14 @@ export function EquityChart({ traderId }: EquityChartProps) {
             <Tooltip content={<CustomTooltip />} />
             <ReferenceLine
               y={displayMode === 'dollar' ? initialBalance : 0}
-              stroke="#474D57"
+              stroke="var(--panel-border-hover)"
               strokeDasharray="3 3"
               label={{
                 value:
                   displayMode === 'dollar'
                     ? t('initialBalance', language).split(' ')[0]
                     : '0%',
-                fill: '#848E9C',
+                fill: 'var(--text-secondary)',
                 fontSize: 12,
               }}
             />
@@ -361,11 +391,15 @@ export function EquityChart({ traderId }: EquityChartProps) {
               dataKey="value"
               stroke="url(#colorGradient)"
               strokeWidth={3}
-              dot={chartData.length > 50 ? false : { fill: '#F0B90B', r: 3 }}
+              dot={
+                chartData.length > 50
+                  ? false
+                  : { fill: 'var(--binance-yellow)', r: 3 }
+              }
               activeDot={{
                 r: 6,
-                fill: '#FCD535',
-                stroke: '#F0B90B',
+                fill: 'var(--binance-yellow-light)',
+                stroke: 'var(--binance-yellow)',
                 strokeWidth: 2,
               }}
               connectNulls={true}
@@ -375,81 +409,83 @@ export function EquityChart({ traderId }: EquityChartProps) {
       </div>
 
       {/* Footer Stats */}
-      <div
-        className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-3"
-        style={{ borderTop: '1px solid #2B3139' }}
-      >
+      {!compact && (
         <div
-          className="p-2 rounded transition-all hover:bg-opacity-50"
-          style={{ background: 'rgba(240, 185, 11, 0.05)' }}
+          className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-3"
+          style={{ borderTop: '1px solid var(--panel-border)' }}
         >
           <div
-            className="text-xs mb-1 uppercase tracking-wider"
-            style={{ color: '#848E9C' }}
+            className="p-2 rounded transition-all hover:bg-opacity-50"
+            style={{ background: 'rgba(52, 211, 153, 0.05)' }}
           >
-            {t('initialBalance', language)}
+            <div
+              className="text-xs mb-1 uppercase tracking-wider"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('initialBalance', language)}
+            </div>
+            <div
+              className="text-xs sm:text-sm font-bold mono"
+              style={{ color: 'var(--foreground)' }}
+            >
+              {initialBalance.toFixed(2)} USDT
+            </div>
           </div>
           <div
-            className="text-xs sm:text-sm font-bold mono"
-            style={{ color: '#EAECEF' }}
+            className="p-2 rounded transition-all hover:bg-opacity-50"
+            style={{ background: 'rgba(52, 211, 153, 0.05)' }}
           >
-            {initialBalance.toFixed(2)} USDT
+            <div
+              className="text-xs mb-1 uppercase tracking-wider"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('currentEquity', language)}
+            </div>
+            <div
+              className="text-xs sm:text-sm font-bold mono"
+              style={{ color: 'var(--foreground)' }}
+            >
+              {currentValue.raw_equity.toFixed(2)} USDT
+            </div>
+          </div>
+          <div
+            className="p-2 rounded transition-all hover:bg-opacity-50"
+            style={{ background: 'rgba(52, 211, 153, 0.05)' }}
+          >
+            <div
+              className="text-xs mb-1 uppercase tracking-wider"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('historicalCycles', language)}
+            </div>
+            <div
+              className="text-xs sm:text-sm font-bold mono"
+              style={{ color: 'var(--foreground)' }}
+            >
+              {validHistory.length} {t('cycles', language)}
+            </div>
+          </div>
+          <div
+            className="p-2 rounded transition-all hover:bg-opacity-50"
+            style={{ background: 'rgba(52, 211, 153, 0.05)' }}
+          >
+            <div
+              className="text-xs mb-1 uppercase tracking-wider"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('displayRange', language)}
+            </div>
+            <div
+              className="text-xs sm:text-sm font-bold mono"
+              style={{ color: 'var(--foreground)' }}
+            >
+              {validHistory.length > MAX_DISPLAY_POINTS
+                ? `${t('recent', language)} ${MAX_DISPLAY_POINTS}`
+                : t('allData', language)}
+            </div>
           </div>
         </div>
-        <div
-          className="p-2 rounded transition-all hover:bg-opacity-50"
-          style={{ background: 'rgba(240, 185, 11, 0.05)' }}
-        >
-          <div
-            className="text-xs mb-1 uppercase tracking-wider"
-            style={{ color: '#848E9C' }}
-          >
-            {t('currentEquity', language)}
-          </div>
-          <div
-            className="text-xs sm:text-sm font-bold mono"
-            style={{ color: '#EAECEF' }}
-          >
-            {currentValue.raw_equity.toFixed(2)} USDT
-          </div>
-        </div>
-        <div
-          className="p-2 rounded transition-all hover:bg-opacity-50"
-          style={{ background: 'rgba(240, 185, 11, 0.05)' }}
-        >
-          <div
-            className="text-xs mb-1 uppercase tracking-wider"
-            style={{ color: '#848E9C' }}
-          >
-            {t('historicalCycles', language)}
-          </div>
-          <div
-            className="text-xs sm:text-sm font-bold mono"
-            style={{ color: '#EAECEF' }}
-          >
-            {validHistory.length} {t('cycles', language)}
-          </div>
-        </div>
-        <div
-          className="p-2 rounded transition-all hover:bg-opacity-50"
-          style={{ background: 'rgba(240, 185, 11, 0.05)' }}
-        >
-          <div
-            className="text-xs mb-1 uppercase tracking-wider"
-            style={{ color: '#848E9C' }}
-          >
-            {t('displayRange', language)}
-          </div>
-          <div
-            className="text-xs sm:text-sm font-bold mono"
-            style={{ color: '#EAECEF' }}
-          >
-            {validHistory.length > MAX_DISPLAY_POINTS
-              ? `${t('recent', language)} ${MAX_DISPLAY_POINTS}`
-              : t('allData', language)}
-          </div>
-        </div>
-      </div>
-    </div>
+      )}
+    </UiCard>
   )
 }

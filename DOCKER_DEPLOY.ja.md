@@ -1,6 +1,6 @@
 # 🐳 Dockerワンクリックデプロイガイド
 
-このガイドは、Dockerを使用してNOFX AIトレーディング競争システムを迅速にデプロイする方法を説明します。
+このガイドは、Dockerを使用してGUANLAN AIトレーディング競争システムを迅速にデプロイする方法を説明します。
 
 ## 📋 前提条件
 
@@ -277,8 +277,8 @@ cp config.json.example config.json
 
 ```bash
 # ヘルスステータスを確認
-docker inspect nofx-backend | jq '.[0].State.Health'
-docker inspect nofx-frontend | jq '.[0].State.Health'
+docker inspect guanlan-backend | jq '.[0].State.Health'
+docker inspect guanlan-frontend | jq '.[0].State.Health'
 
 # ヘルスエンドポイントを手動でテスト
 curl http://localhost:8080/health
@@ -346,7 +346,7 @@ docker system prune -a --volumes
 ### Nginxリバースプロキシの使用
 
 ```nginx
-# /etc/nginx/sites-available/nofx
+# /etc/nginx/sites-available/guanlan
 server {
     listen 80;
     server_name your-domain.com;
@@ -385,13 +385,13 @@ sudo certbot renew --dry-run
 docker swarm init
 
 # スタックをデプロイ
-docker stack deploy -c docker-compose.yml nofx
+docker stack deploy -c docker-compose.yml guanlan
 
 # サービスステータスを表示
-docker stack services nofx
+docker stack services guanlan
 
 # サービスをスケール
-docker service scale nofx_backend=3
+docker service scale guanlan_backend=3
 ```
 
 ## 📈 監視＆ロギング
@@ -432,7 +432,7 @@ services:
 
 ## 🆘 ヘルプを取得
 
-- **GitHub Issues**: [Issueを提出](https://github.com/yourusername/open-nofx/issues)
+- **GitHub Issues**: [Issueを提出](#)
 - **ドキュメント**: [README.md](README.md)を確認
 - **コミュニティ**: Discord/Telegramグループに参加
 
@@ -467,6 +467,6 @@ docker system prune -a             # Dockerリソースをクリーン
 
 ---
 
-🎉 おめでとうございます！NOFX AIトレーディング競争システムのデプロイに成功しました！
+🎉 おめでとうございます！GUANLAN AIトレーディング競争システムのデプロイに成功しました！
 
 問題が発生した場合は、[トラブルシューティング](#-トラブルシューティング)セクションを確認するか、Issueを提出してください。

@@ -1,4 +1,6 @@
+import type { SignalConfig } from './components/BinanceSignalSettings'
 export interface SystemStatus {
+	entry_protection_blocked?: boolean
   trader_id: string
   trader_name: string
   ai_model: string
@@ -41,7 +43,28 @@ export interface Position {
   margin_used: number
 }
 
+export interface PositionSnapshot {
+  positions: Position[]
+  asOf: number
+}
+
+export interface HistoryAmount { asset: string; amount: number }
+export interface HistoryOrder {
+  id: string; order_id: string; symbol: string; action: string; side: string; position_side: string
+  first_time: number; last_time: number; price: number; quantity: number; notional: number
+  realized_pnl: number; commissions: HistoryAmount[]; net_pnl: number | null; fills: number
+}
+export interface HistoryIncome { id: string; time: number; symbol: string; type: string; asset: string; amount: number }
+export interface TradingHistory {
+  start: number; end: number; fetched_at: string; income_complete: boolean; orders_complete: boolean; warnings: string[]
+  summary: { realized_pnl: number; commission: number; funding: number; trading_net: number; transfers: number; other: number; ledger_net: number; other_assets: HistoryAmount[] }
+  orders: HistoryOrder[]; income: HistoryIncome[]
+}
+
 export interface DecisionAction {
+	stop_loss?: number
+	take_profit?: number
+	protection_status?: 'pending' | 'confirmed' | 'failed' | 'rolled_back'
   action: string
   symbol: string
   quantity: number
@@ -86,6 +109,7 @@ export interface Statistics {
 
 // AI Trading相关类型
 export interface TraderInfo {
+  signal_config?: SignalConfig
   trader_id: string
   trader_name: string
   ai_model: string
@@ -123,6 +147,7 @@ export interface Exchange {
 }
 
 export interface CreateTraderRequest {
+  signal_config?: SignalConfig
   name: string
   ai_model_id: string
   exchange_id: string
@@ -188,6 +213,7 @@ export interface CompetitionData {
 
 // Trader Configuration Data for View Modal
 export interface TraderConfigData {
+  signal_config?: SignalConfig
   trader_id?: string
   trader_name: string
   ai_model: string

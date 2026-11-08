@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# NoFX Trading Bot - PM2 管理脚本
+# Guanlan Trading Bot - PM2 管理脚本
 # 用法: ./pm2.sh [start|stop|restart|status|logs|build]
 
 set -e
@@ -37,7 +37,7 @@ print_error() {
 
 print_header() {
     echo -e "${PURPLE}═══════════════════════════════════════${NC}"
-    echo -e "${PURPLE}  🤖 NoFX Trading Bot - PM2 Manager${NC}"
+    echo -e "${PURPLE}  🤖 Guanlan Trading Bot - PM2 Manager${NC}"
     echo -e "${PURPLE}═══════════════════════════════════════${NC}"
     echo ""
 }
@@ -60,7 +60,7 @@ ensure_log_dirs() {
 # 函数：编译后端
 build_backend() {
     print_info "正在编译后端..."
-    go build -o nofx
+    go build -o guanlan
     if [ $? -eq 0 ]; then
         print_success "后端编译完成"
     else
@@ -89,7 +89,7 @@ start_services() {
     ensure_log_dirs
 
     # 检查后端二进制文件是否存在
-    if [ ! -f "./nofx" ]; then
+    if [ ! -f "./guanlan" ]; then
         print_warning "后端二进制文件不存在，开始编译..."
         build_backend
     fi
@@ -146,9 +146,9 @@ show_status() {
     pm2 status
     echo ""
     print_info "详细信息:"
-    pm2 info nofx-backend
+    pm2 info guanlan-backend
     echo ""
-    pm2 info nofx-frontend
+    pm2 info guanlan-frontend
 }
 
 # 函数：查看日志
@@ -157,9 +157,9 @@ show_logs() {
         # 显示所有日志
         pm2 logs
     elif [ "$2" = "backend" ]; then
-        pm2 logs nofx-backend
+        pm2 logs guanlan-backend
     elif [ "$2" = "frontend" ]; then
-        pm2 logs nofx-frontend
+        pm2 logs guanlan-frontend
     else
         print_error "未知的日志类型: $2"
         print_info "用法: ./pm2.sh logs [backend|frontend]"
@@ -181,7 +181,7 @@ rebuild_and_restart() {
     build_backend
 
     print_info "正在重启后端服务..."
-    pm2 restart nofx-backend
+    pm2 restart guanlan-backend
 
     sleep 2
     pm2 status

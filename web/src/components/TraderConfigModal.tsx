@@ -1,4 +1,21 @@
-import { useState, useEffect } from 'react'
+import { uiText } from '../i18n/uiText'
+import { UiCard } from './design/Controls'
+import {
+  UiDialog,
+  UiButton,
+  UiInput,
+  UiSelect,
+  UiTextarea,
+  UiAlert,
+} from './design/Controls'
+import { Settings2, SlidersHorizontal, MessageSquare } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import {
+  BinanceSignalSettings,
+  defaultSignalConfig,
+  type SignalConfig,
+} from './BinanceSignalSettings'
+import { FuturesSymbolSelector } from './FuturesSymbolSelector'
 import type { AIModel, Exchange, CreateTraderRequest } from '../types'
 import { useLanguage } from '../contexts/LanguageContext'
 import { t } from '../i18n/translations'
@@ -10,6 +27,7 @@ function getShortName(fullName: string): string {
 }
 
 interface TraderConfigData {
+  signal_config?: SignalConfig
   trader_id?: string
   trader_name: string
   ai_model: string
@@ -48,6 +66,7 @@ export function TraderConfigModal({
 }: TraderConfigModalProps) {
   const { language } = useLanguage()
   const [formData, setFormData] = useState<TraderConfigData>({
+    signal_config: { ...defaultSignalConfig },
     trader_name: '',
     ai_model: '',
     exchange_id: '',
@@ -63,27 +82,32 @@ export function TraderConfigModal({
     initial_balance: 1000,
     scan_interval_minutes: 3,
   })
+  const initialized = useRef<string | null>(null)
+  const [saveError, setSaveError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
-  const [availableCoins, setAvailableCoins] = useState<string[]>([])
-  const [selectedCoins, setSelectedCoins] = useState<string[]>([])
+  const selectedCoins = formData.trading_symbols
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean)
   const [showCoinSelector, setShowCoinSelector] = useState(false)
   const [promptTemplates, setPromptTemplates] = useState<{ name: string }[]>([])
   const [isFetchingBalance, setIsFetchingBalance] = useState(false)
   const [balanceFetchError, setBalanceFetchError] = useState<string>('')
 
   useEffect(() => {
+    if (!isOpen) {
+      initialized.current = null
+      return
+    }
+    const key = isEditMode ? traderData?.trader_id || 'edit' : 'create'
+    if (initialized.current === key) return
+    initialized.current = key
+    setSaveError('')
     if (traderData) {
       setFormData(traderData)
-      // 设置已选择的币种
-      if (traderData.trading_symbols) {
-        const coins = traderData.trading_symbols
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s)
-        setSelectedCoins(coins)
-      }
     } else if (!isEditMode) {
       setFormData({
+        signal_config: { ...defaultSignalConfig },
         trader_name: '',
         ai_model: availableModels[0]?.id || '',
         exchange_id: availableExchanges[0]?.id || '',
@@ -107,33 +131,7 @@ export function TraderConfigModal({
         system_prompt_template: 'default',
       }))
     }
-  }, [traderData, isEditMode, availableModels, availableExchanges])
-
-  // 获取系统配置中的币种列表
-  useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const response = await fetch('/api/config')
-        const config = await response.json()
-        if (config.default_coins) {
-          setAvailableCoins(config.default_coins)
-        }
-      } catch (error) {
-        console.error('Failed to fetch config:', error)
-        // 使用默认币种列表
-        setAvailableCoins([
-          'BTCUSDT',
-          'ETHUSDT',
-          'SOLUSDT',
-          'BNBUSDT',
-          'XRPUSDT',
-          'DOGEUSDT',
-          'ADAUSDT',
-        ])
-      }
-    }
-    fetchConfig()
-  }, [])
+  }, [isOpen, traderData, isEditMode, availableModels, availableExchanges])
 
   // 获取系统提示词模板列表
   useEffect(() => {
@@ -147,46 +145,37 @@ export function TraderConfigModal({
       } catch (error) {
         console.error('Failed to fetch prompt templates:', error)
         // 使用默认模板列表
-        setPromptTemplates([{ name: 'default' }, { name: 'aggressive' }])
+        setPromptTemplates([{ name: 'default' }])
       }
     }
     fetchPromptTemplates()
   }, [])
 
-  // 当选择的币种改变时，更新输入框
-  useEffect(() => {
-    const symbolsString = selectedCoins.join(',')
-    setFormData((prev) => ({ ...prev, trading_symbols: symbolsString }))
-  }, [selectedCoins])
-
   if (!isOpen) return null
 
   const handleInputChange = (field: keyof TraderConfigData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
-
-    // 如果是直接编辑trading_symbols，同步更新selectedCoins
-    if (field === 'trading_symbols') {
-      const coins = value
-        .split(',')
-        .map((s: string) => s.trim())
-        .filter((s: string) => s)
-      setSelectedCoins(coins)
-    }
   }
 
   const handleCoinToggle = (coin: string) => {
-    setSelectedCoins((prev) => {
-      if (prev.includes(coin)) {
-        return prev.filter((c) => c !== coin)
-      } else {
-        return [...prev, coin]
+    setFormData((prev) => {
+      const coins = prev.trading_symbols
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean)
+      return {
+        ...prev,
+        trading_symbols: (coins.includes(coin)
+          ? coins.filter((c) => c !== coin)
+          : [...coins, coin]
+        ).join(','),
       }
     })
   }
 
   const handleFetchCurrentBalance = async () => {
     if (!isEditMode || !traderData?.trader_id) {
-      setBalanceFetchError('只有在编辑模式下才能获取当前余额')
+      setBalanceFetchError(uiText('只有在编辑模式下才能获取当前余额', language))
       return
     }
 
@@ -205,7 +194,7 @@ export function TraderConfigModal({
       )
 
       if (!response.ok) {
-        throw new Error('获取账户余额失败')
+        throw new Error(uiText('获取账户余额失败', language))
       }
 
       const data = await response.json()
@@ -217,10 +206,10 @@ export function TraderConfigModal({
       setFormData((prev) => ({ ...prev, initial_balance: currentBalance }))
 
       // 显示成功提示
-      console.log('已获取当前余额:', currentBalance)
+      console.log(uiText('已获取当前余额:', language), currentBalance)
     } catch (error) {
-      console.error('获取余额失败:', error)
-      setBalanceFetchError('获取余额失败，请检查网络连接')
+      console.error(uiText('获取余额失败:', language), error)
+      setBalanceFetchError(uiText('获取余额失败，请检查网络连接', language))
     } finally {
       setIsFetchingBalance(false)
     }
@@ -229,113 +218,139 @@ export function TraderConfigModal({
   const handleSave = async () => {
     if (!onSave) return
 
+    setSaveError('')
     setIsSaving(true)
     try {
+      if (!formData.trader_name.trim())
+        throw new Error(uiText('请输入交易员名称', language))
       const saveData: CreateTraderRequest = {
-        name: formData.trader_name,
+        name: formData.trader_name.trim(),
         ai_model_id: formData.ai_model,
         exchange_id: formData.exchange_id,
         btc_eth_leverage: formData.btc_eth_leverage,
         altcoin_leverage: formData.altcoin_leverage,
-        trading_symbols: formData.trading_symbols,
+        trading_symbols: formData.trading_symbols
+          .split(/[,，;；\s]+/)
+          .filter(Boolean)
+          .map((s) => s.toUpperCase())
+          .join(','),
         custom_prompt: formData.custom_prompt,
         override_base_prompt: formData.override_base_prompt,
         system_prompt_template: formData.system_prompt_template,
         is_cross_margin: formData.is_cross_margin,
-        use_coin_pool: formData.use_coin_pool,
-        use_oi_top: formData.use_oi_top,
+        use_coin_pool: false,
+        signal_config: formData.signal_config || defaultSignalConfig,
+        use_oi_top: false,
         initial_balance: formData.initial_balance,
         scan_interval_minutes: formData.scan_interval_minutes,
       }
       await onSave(saveData)
       onClose()
     } catch (error) {
-      console.error('保存失败:', error)
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : uiText('保存失败，请重试', language)
+      )
     } finally {
       setIsSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+    <UiDialog onClose={isSaving ? undefined : onClose} width={880}>
       <div
-        className="bg-[#1E2329] border border-[#2B3139] rounded-xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+        aria-labelledby="trader-config-title"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[#2B3139] bg-gradient-to-r from-[#1E2329] to-[#252B35]">
+        <div className="desk-dialog-header">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#F0B90B] to-[#E1A706] flex items-center justify-center">
-              <span className="text-lg">{isEditMode ? '✏️' : '➕'}</span>
+            <div className="desk-icon">
+              <Settings2 size={20} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-[#EAECEF]">
-                {isEditMode ? '修改交易员' : '创建交易员'}
+              <h2
+                id="trader-config-title"
+                className="text-xl font-bold text-[var(--foreground)]"
+              >
+                {isEditMode
+                  ? uiText('修改交易员', language)
+                  : uiText('创建交易员', language)}
               </h2>
-              <p className="text-sm text-[#848E9C] mt-1">
-                {isEditMode ? '修改交易员配置参数' : '配置新的AI交易员'}
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                {isEditMode
+                  ? uiText('修改交易员配置参数', language)
+                  : uiText('配置新的AI交易员', language)}
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg text-[#848E9C] hover:text-[#EAECEF] hover:bg-[#2B3139] transition-colors flex items-center justify-center"
-          >
-            ✕
-          </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-8">
+        <div className="desk-dialog-body space-y-6">
           {/* Basic Info */}
-          <div className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-[#EAECEF] mb-5 flex items-center gap-2">
-              🤖 基础配置
+          <UiCard className="bg-[var(--background)] border border-[var(--panel-border)] rounded-lg p-5">
+            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-5 flex items-center gap-2">
+              <Settings2 size={18} className="text-[var(--binance-yellow)]" />{' '}
+              {uiText('基础配置', language)}{' '}
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-[#EAECEF] block mb-2">
-                  交易员名称
+                <label
+                  htmlFor="trader-field-1"
+                  className="text-sm text-[var(--foreground)] block mb-2"
+                >
+                  {uiText('交易员名称', language)}{' '}
                 </label>
-                <input
+                <UiInput
+                  id="trader-field-1"
                   type="text"
                   value={formData.trader_name}
                   onChange={(e) =>
                     handleInputChange('trader_name', e.target.value)
                   }
-                  className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
-                  placeholder="请输入交易员名称"
+                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
+                  placeholder={uiText('请输入交易员名称', language)}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-[#EAECEF] block mb-2">
-                    AI模型
+                  <label
+                    htmlFor="trader-field-2"
+                    className="text-sm text-[var(--foreground)] block mb-2"
+                  >
+                    {uiText('AI模型', language)}{' '}
                   </label>
-                  <select
+                  <UiSelect
+                    id="trader-field-2"
                     value={formData.ai_model}
                     onChange={(e) =>
                       handleInputChange('ai_model', e.target.value)
                     }
-                    className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
                   >
                     {availableModels.map((model) => (
                       <option key={model.id} value={model.id}>
                         {getShortName(model.name || model.id).toUpperCase()}
                       </option>
                     ))}
-                  </select>
+                  </UiSelect>
                 </div>
                 <div>
-                  <label className="text-sm text-[#EAECEF] block mb-2">
-                    交易所
+                  <label
+                    htmlFor="trader-field-3"
+                    className="text-sm text-[var(--foreground)] block mb-2"
+                  >
+                    {uiText('交易所', language)}{' '}
                   </label>
-                  <select
+                  <UiSelect
+                    id="trader-field-3"
                     value={formData.exchange_id}
                     onChange={(e) =>
                       handleInputChange('exchange_id', e.target.value)
                     }
-                    className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
                   >
                     {availableExchanges.map((exchange) => (
                       <option key={exchange.id} value={exchange.id}>
@@ -344,71 +359,79 @@ export function TraderConfigModal({
                         ).toUpperCase()}
                       </option>
                     ))}
-                  </select>
+                  </UiSelect>
                 </div>
               </div>
             </div>
-          </div>
+          </UiCard>
 
           {/* Trading Configuration */}
-          <div className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-[#EAECEF] mb-5 flex items-center gap-2">
-              ⚖️ 交易配置
+          <UiCard className="bg-[var(--background)] border border-[var(--panel-border)] rounded-lg p-5">
+            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-5 flex items-center gap-2">
+              <SlidersHorizontal
+                size={18}
+                className="text-[var(--binance-yellow)]"
+              />{' '}
+              {uiText('交易配置', language)}{' '}
             </h3>
             <div className="space-y-4">
               {/* 第一行：保证金模式和初始余额 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-[#EAECEF] block mb-2">
-                    保证金模式
+                  <label className="text-sm text-[var(--foreground)] block mb-2">
+                    {uiText('保证金模式', language)}{' '}
                   </label>
                   <div className="flex gap-2">
-                    <button
+                    <UiButton
                       type="button"
                       onClick={() => handleInputChange('is_cross_margin', true)}
                       className={`flex-1 px-3 py-2 rounded text-sm ${
                         formData.is_cross_margin
-                          ? 'bg-[#F0B90B] text-black'
-                          : 'bg-[#0B0E11] text-[#848E9C] border border-[#2B3139]'
+                          ? 'bg-[var(--binance-yellow)] text-black'
+                          : 'bg-[var(--background)] text-[var(--text-secondary)] border border-[var(--panel-border)]'
                       }`}
                     >
-                      全仓
-                    </button>
-                    <button
+                      {uiText('全仓', language)}{' '}
+                    </UiButton>
+                    <UiButton
                       type="button"
                       onClick={() =>
                         handleInputChange('is_cross_margin', false)
                       }
                       className={`flex-1 px-3 py-2 rounded text-sm ${
                         !formData.is_cross_margin
-                          ? 'bg-[#F0B90B] text-black'
-                          : 'bg-[#0B0E11] text-[#848E9C] border border-[#2B3139]'
+                          ? 'bg-[var(--binance-yellow)] text-black'
+                          : 'bg-[var(--background)] text-[var(--text-secondary)] border border-[var(--panel-border)]'
                       }`}
                     >
-                      逐仓
-                    </button>
+                      {uiText('逐仓', language)}{' '}
+                    </UiButton>
                   </div>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm text-[#EAECEF]">
-                      初始余额 ($)
+                    <label className="text-sm text-[var(--foreground)]">
+                      {uiText('初始余额 ($)', language)}{' '}
                       {!isEditMode && (
-                        <span className="text-[#F0B90B] ml-1">*</span>
+                        <span className="text-[var(--binance-yellow)] ml-1">
+                          *
+                        </span>
                       )}
                     </label>
                     {isEditMode && (
-                      <button
+                      <UiButton
                         type="button"
                         onClick={handleFetchCurrentBalance}
                         disabled={isFetchingBalance}
-                        className="px-3 py-1 text-xs bg-[#F0B90B] text-black rounded hover:bg-[#E1A706] transition-colors disabled:bg-[#848E9C] disabled:cursor-not-allowed"
+                        className="px-3 py-1 text-xs bg-[var(--binance-yellow)] text-black rounded hover:bg-[#10b981] transition-colors disabled:bg-[var(--text-secondary)] disabled:cursor-not-allowed"
                       >
-                        {isFetchingBalance ? '获取中...' : '获取当前余额'}
-                      </button>
+                        {isFetchingBalance
+                          ? uiText('获取中...', language)
+                          : uiText('获取当前余额', language)}
+                      </UiButton>
                     )}
                   </div>
-                  <input
+                  <UiInput
                     type="number"
                     value={formData.initial_balance}
                     onChange={(e) =>
@@ -417,12 +440,12 @@ export function TraderConfigModal({
                         Number(e.target.value)
                       )
                     }
-                    className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
                     min="100"
                     step="0.01"
                   />
                   {!isEditMode && (
-                    <p className="text-xs text-[#F0B90B] mt-1 flex items-center gap-1">
+                    <p className="text-xs text-[var(--binance-yellow)] mt-1 flex items-center gap-1">
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         className="w-3.5 h-3.5"
@@ -437,12 +460,18 @@ export function TraderConfigModal({
                         <line x1="12" x2="12" y1="9" y2="13" />
                         <line x1="12" x2="12.01" y1="17" y2="17" />
                       </svg>
-                      请输入您交易所账户的当前实际余额。如果输入不准确，P&L统计将会错误。
+                      {uiText(
+                        '请输入您交易所账户的当前实际余额。如果输入不准确，P&L统计将会错误。',
+                        language
+                      )}{' '}
                     </p>
                   )}
                   {isEditMode && (
-                    <p className="text-xs text-[#848E9C] mt-1">
-                      点击"获取当前余额"按钮可自动获取您交易所账户的当前净值
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">
+                      {uiText(
+                        '点击"获取当前余额"按钮可自动获取您交易所账户的当前净值',
+                        language
+                      )}{' '}
                     </p>
                   )}
                   {balanceFetchError && (
@@ -456,21 +485,25 @@ export function TraderConfigModal({
               {/* 第二行：AI 扫描决策间隔 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-[#EAECEF] block mb-2">
+                  <label
+                    htmlFor="trader-field-4"
+                    className="text-sm text-[var(--foreground)] block mb-2"
+                  >
                     {t('aiScanInterval', language)}
                   </label>
-                  <input
+                  <UiInput
+                    id="trader-field-4"
                     type="number"
                     value={formData.scan_interval_minutes}
                     onChange={(e) => {
                       const parsedValue = Number(e.target.value)
                       const safeValue = Number.isFinite(parsedValue)
-                        ? Math.max(3, parsedValue)
+                        ? Math.min(60, Math.max(1, Math.trunc(parsedValue)))
                         : 3
                       handleInputChange('scan_interval_minutes', safeValue)
                     }}
-                    className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
-                    min="3"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
+                    min="1"
                     max="60"
                     step="1"
                   />
@@ -484,10 +517,14 @@ export function TraderConfigModal({
               {/* 第三行：杠杆设置 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-[#EAECEF] block mb-2">
-                    BTC/ETH 杠杆
+                  <label
+                    htmlFor="trader-field-5"
+                    className="text-sm text-[var(--foreground)] block mb-2"
+                  >
+                    {uiText('BTC/ETH 杠杆', language)}{' '}
                   </label>
-                  <input
+                  <UiInput
+                    id="trader-field-5"
                     type="number"
                     value={formData.btc_eth_leverage}
                     onChange={(e) =>
@@ -496,16 +533,20 @@ export function TraderConfigModal({
                         Number(e.target.value)
                       )
                     }
-                    className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
                     min="1"
                     max="125"
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-[#EAECEF] block mb-2">
-                    山寨币杠杆
+                  <label
+                    htmlFor="trader-field-6"
+                    className="text-sm text-[var(--foreground)] block mb-2"
+                  >
+                    {uiText('山寨币杠杆', language)}{' '}
                   </label>
-                  <input
+                  <UiInput
+                    id="trader-field-6"
                     type="number"
                     value={formData.altcoin_leverage}
                     onChange={(e) =>
@@ -514,7 +555,7 @@ export function TraderConfigModal({
                         Number(e.target.value)
                       )
                     }
-                    className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
                     min="1"
                     max="75"
                   />
@@ -524,126 +565,101 @@ export function TraderConfigModal({
               {/* 第三行：交易币种 */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-[#EAECEF]">
-                    交易币种 (用逗号分隔，留空使用默认)
+                  <label className="text-sm text-[var(--foreground)]">
+                    {uiText(
+                      '交易币种 (用逗号分隔，留空使用默认)',
+                      language
+                    )}{' '}
                   </label>
-                  <button
+                  <UiButton
                     type="button"
                     onClick={() => setShowCoinSelector(!showCoinSelector)}
-                    className="px-3 py-1 text-xs bg-[#F0B90B] text-black rounded hover:bg-[#E1A706] transition-colors"
+                    className="px-3 py-1 text-xs bg-[var(--binance-yellow)] text-black rounded hover:bg-[#10b981] transition-colors"
                   >
-                    {showCoinSelector ? '收起选择' : '快速选择'}
-                  </button>
+                    {showCoinSelector
+                      ? uiText('收起选择', language)
+                      : uiText('快速选择', language)}
+                  </UiButton>
                 </div>
-                <input
+                <UiInput
                   type="text"
                   value={formData.trading_symbols}
                   onChange={(e) =>
                     handleInputChange('trading_symbols', e.target.value)
                   }
-                  className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
-                  placeholder="例如: BTCUSDT,ETHUSDT,ADAUSDT"
+                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
+                  placeholder={uiText(
+                    '例如: BTCUSDT,ETHUSDT,ADAUSDT',
+                    language
+                  )}
                 />
 
                 {/* 币种选择器 */}
                 {showCoinSelector && (
-                  <div className="mt-3 p-3 bg-[#0B0E11] border border-[#2B3139] rounded">
-                    <div className="text-xs text-[#848E9C] mb-2">
-                      点击选择币种：
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {availableCoins.map((coin) => (
-                        <button
-                          key={coin}
-                          type="button"
-                          onClick={() => handleCoinToggle(coin)}
-                          className={`px-2 py-1 text-xs rounded transition-colors ${
-                            selectedCoins.includes(coin)
-                              ? 'bg-[#F0B90B] text-black'
-                              : 'bg-[#1E2329] text-[#848E9C] border border-[#2B3139] hover:border-[#F0B90B]'
-                          }`}
-                        >
-                          {coin.replace('USDT', '')}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <FuturesSymbolSelector
+                    selected={selectedCoins}
+                    onToggle={handleCoinToggle}
+                  />
                 )}
               </div>
             </div>
-          </div>
+          </UiCard>
 
-          {/* Signal Sources */}
-          <div className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-[#EAECEF] mb-5 flex items-center gap-2">
-              📡 信号源配置
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={formData.use_coin_pool}
-                  onChange={(e) =>
-                    handleInputChange('use_coin_pool', e.target.checked)
-                  }
-                  className="w-4 h-4"
-                />
-                <label className="text-sm text-[#EAECEF]">
-                  使用 Coin Pool 信号
-                </label>
-              </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={formData.use_oi_top}
-                  onChange={(e) =>
-                    handleInputChange('use_oi_top', e.target.checked)
-                  }
-                  className="w-4 h-4"
-                />
-                <label className="text-sm text-[#EAECEF]">
-                  使用 OI Top 信号
-                </label>
-              </div>
-            </div>
-          </div>
+          <BinanceSignalSettings
+            value={formData.signal_config}
+            symbols={formData.trading_symbols}
+            exchange={formData.exchange_id}
+            onChange={(value) => handleInputChange('signal_config', value)}
+          />
 
           {/* Trading Prompt */}
-          <div className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-5">
-            <h3 className="text-lg font-semibold text-[#EAECEF] mb-5 flex items-center gap-2">
-              💬 交易策略提示词
+          <UiCard className="bg-[var(--background)] border border-[var(--panel-border)] rounded-lg p-5">
+            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-5 flex items-center gap-2">
+              <MessageSquare
+                size={18}
+                className="text-[var(--binance-yellow)]"
+              />{' '}
+              {uiText('交易策略提示词', language)}{' '}
             </h3>
             <div className="space-y-4">
               {/* 系统提示词模板选择 */}
               <div>
-                <label className="text-sm text-[#EAECEF] block mb-2">
-                  系统提示词模板
+                <label
+                  htmlFor="trader-field-7"
+                  className="text-sm text-[var(--foreground)] block mb-2"
+                >
+                  {uiText('系统提示词模板', language)}{' '}
                 </label>
-                <select
+                <UiSelect
+                  id="trader-field-7"
                   value={formData.system_prompt_template}
                   onChange={(e) =>
                     handleInputChange('system_prompt_template', e.target.value)
                   }
-                  className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none"
                 >
                   {promptTemplates.map((template) => (
                     <option key={template.name} value={template.name}>
                       {template.name === 'default'
-                        ? 'Default (默认稳健)'
+                        ? uiText('观澜永续 · 趋势与风控（默认）', language)
                         : template.name === 'aggressive'
-                          ? 'Aggressive (激进)'
+                          ? uiText('Aggressive (激进)', language)
                           : template.name.charAt(0).toUpperCase() +
                             template.name.slice(1)}
                     </option>
                   ))}
-                </select>
-                <p className="text-xs text-[#848E9C] mt-1">
-                  选择预设的交易策略模板（包含交易哲学、风控原则等）
+                </UiSelect>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  {uiText(
+                    '默认策略：趋势确认与量价验证，单笔风险预算 0.5%，杠杆上限 3 倍。不满足条件时观望；策略尚需模拟验证。',
+                    language
+                  )}{' '}
                 </p>
               </div>
 
               <div className="flex items-center gap-3">
-                <input
+                <UiInput
+                  id="override-base-prompt"
                   type="checkbox"
                   checked={formData.override_base_prompt}
                   onChange={(e) =>
@@ -651,8 +667,13 @@ export function TraderConfigModal({
                   }
                   className="w-4 h-4"
                 />
-                <label className="text-sm text-[#EAECEF]">覆盖默认提示词</label>
-                <span className="text-xs text-[#F0B90B] inline-flex items-center gap-1">
+                <label
+                  htmlFor="override-base-prompt"
+                  className="text-sm text-[var(--foreground)]"
+                >
+                  {uiText('覆盖默认提示词', language)}{' '}
+                </label>
+                <span className="text-xs text-[var(--binance-yellow)] inline-flex items-center gap-1">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     className="w-3.5 h-3.5"
@@ -667,42 +688,55 @@ export function TraderConfigModal({
                     <line x1="12" x2="12" y1="9" y2="13" />
                     <line x1="12" x2="12.01" y1="17" y2="17" />
                   </svg>{' '}
-                  启用后将完全替换默认策略
+                  {uiText('启用后将完全替换默认策略', language)}{' '}
                 </span>
               </div>
               <div>
-                <label className="text-sm text-[#EAECEF] block mb-2">
+                <label
+                  htmlFor="trader-field-8"
+                  className="text-sm text-[var(--foreground)] block mb-2"
+                >
                   {formData.override_base_prompt
-                    ? '自定义提示词'
-                    : '附加提示词'}
+                    ? uiText('自定义提示词', language)
+                    : uiText('附加提示词', language)}
                 </label>
-                <textarea
+                <UiTextarea
+                  id="trader-field-8"
                   value={formData.custom_prompt}
                   onChange={(e) =>
                     handleInputChange('custom_prompt', e.target.value)
                   }
-                  className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none h-24 resize-none"
+                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--panel-border)] rounded text-[var(--foreground)] focus:border-[var(--binance-yellow)] focus:outline-none h-24 resize-none"
                   placeholder={
                     formData.override_base_prompt
-                      ? '输入完整的交易策略提示词...'
-                      : '输入额外的交易策略提示...'
+                      ? uiText('输入完整的交易策略提示词...', language)
+                      : uiText('输入额外的交易策略提示...', language)
                   }
                 />
               </div>
             </div>
-          </div>
+          </UiCard>
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t border-[#2B3139] bg-gradient-to-r from-[#1E2329] to-[#252B35]">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 bg-[#2B3139] text-[#EAECEF] rounded-lg hover:bg-[#404750] transition-all duration-200 border border-[#404750]"
+        {saveError && (
+          <UiAlert
+            role="alert"
+            className="mx-6 mb-3 p-3 rounded border border-red-500 text-red-400 text-sm"
           >
-            取消
-          </button>
+            {saveError}
+          </UiAlert>
+        )}
+        {/* Footer */}
+        <div className="desk-dialog-footer">
+          <UiButton
+            onClick={onClose}
+            disabled={isSaving}
+            className="px-6 py-3 bg-[var(--panel-border)] text-[var(--foreground)] rounded-lg hover:bg-[#404750] transition-all duration-200 border border-[#404750]"
+          >
+            {uiText('取消', language)}{' '}
+          </UiButton>
           {onSave && (
-            <button
+            <UiButton
               onClick={handleSave}
               disabled={
                 isSaving ||
@@ -710,13 +744,17 @@ export function TraderConfigModal({
                 !formData.ai_model ||
                 !formData.exchange_id
               }
-              className="px-8 py-3 bg-gradient-to-r from-[#F0B90B] to-[#E1A706] text-black rounded-lg hover:from-[#E1A706] hover:to-[#D4951E] transition-all duration-200 disabled:bg-[#848E9C] disabled:cursor-not-allowed font-medium shadow-lg"
+              className="px-8 py-3 bg-[var(--binance-yellow)] text-black rounded-lg hover:bg-[var(--binance-yellow-light)] transition-all duration-200 disabled:bg-[var(--text-secondary)] disabled:cursor-not-allowed font-medium shadow-lg"
             >
-              {isSaving ? '保存中...' : isEditMode ? '保存修改' : '创建交易员'}
-            </button>
+              {isSaving
+                ? uiText('保存中...', language)
+                : isEditMode
+                  ? uiText('保存修改', language)
+                  : uiText('创建交易员', language)}
+            </UiButton>
           )}
         </div>
       </div>
-    </div>
+    </UiDialog>
   )
 }

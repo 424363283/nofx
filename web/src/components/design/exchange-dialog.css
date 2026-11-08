@@ -1,0 +1,48 @@
+.exchange-config-dialog .ant-modal-title { font-size: 20px; letter-spacing: -.35px; }
+.exchange-config-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 4px 0 20px; }
+.exchange-config-intro { margin: 0; color: #9db0b7; font-size: 13px; min-width: 0; }
+.exchange-config-toolbar > div { flex-shrink: 0; }
+.exchange-config-form { display: flex; flex-direction: column; gap: 0; }
+.exchange-config-scroll { display: flex; flex-direction: column; gap: 16px; max-height: calc(84dvh - 190px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 4px; }
+.exchange-config-account { padding: 10px 0 14px; border-bottom: 1px solid #29383e; }
+.exchange-config-account > div { margin-bottom: 0; }
+.exchange-config-account > div > div:last-child { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.exchange-config-account > div > div:last-child > div:last-child { border: 1px solid #304149; border-radius: 5px; padding: 1px 6px; font-size: 10px; letter-spacing: .2px; }
+.exchange-config-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 28px; align-items: start; }
+.exchange-config-credentials { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.exchange-config-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.exchange-config-grid h4 { margin: 0; font-size: 14px; font-weight: 600; color: #edf5f3; }
+.exchange-config-section-heading > span { font-size: 11px; color: #82989f; }
+.exchange-config-field { display: grid; gap: 7px; min-width: 0; }
+.exchange-config-field label { font-size: 12px; font-weight: 500; color: #b9c8cd; }
+.exchange-config-field .ant-input { width: 100%; min-width: 0; height: 42px; padding: 9px 12px; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #10181b; border-radius: 8px; }
+.exchange-config-mode { padding-top: 4px; }
+.exchange-config-mode h4 { margin-bottom: 12px; }
+.exchange-config-environment { padding: 0; border: 0; }
+.exchange-config-environment > div { margin: 5px 0 0 24px; font-size: 12px; line-height: 1.6; color: #82989f; }
+.exchange-config-sidebar { display: grid; gap: 12px; min-width: 0; }
+.exchange-config-whitelist, .exchange-config-permissions { padding: 16px; border: 1px solid #293b42; border-radius: 10px; background: #172226; font-size: 12px; line-height: 1.7; color: #9db0b7; }
+.exchange-config-whitelist p { margin: 7px 0 12px; font-size: 12px; line-height: 1.65; }
+.exchange-config-ip-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; background: #10181b; border-radius: 6px; }
+.exchange-config-ip-row code { min-width: 0; overflow-wrap: anywhere; color: #d7e7e2; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; user-select: all; }
+.exchange-config-ip-row .ant-btn { height: 26px; padding: 0 8px; font-size: 11px; flex-shrink: 0; }
+.exchange-config-permissions ul { display: grid; gap: 8px; margin: 10px 0 0; padding-left: 16px; font-size: 12px; line-height: 1.7; }
+.exchange-config-permissions li { padding-left: 2px; }
+.exchange-config-footer { display: flex; flex-shrink: 0; justify-content: flex-end; gap: 10px; padding: 18px 0 0; margin-top: 20px; border-top: 1px solid #304149; background: #141d21; }
+.exchange-config-footer .ant-btn { flex: 0 0 auto; min-width: 104px; height: 40px; }
+@media (max-width: 760px) {
+  .exchange-config-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .exchange-config-sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .exchange-config-sidebar > :only-child { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .exchange-config-dialog .ant-modal-container { padding: 20px 16px; }
+  .exchange-config-toolbar { align-items: flex-start; margin-bottom: 16px; }
+  .exchange-config-intro { max-width: 170px; line-height: 1.6; }
+  .exchange-config-scroll { max-height: calc(100dvh - 240px); }
+  .exchange-config-sidebar { grid-template-columns: minmax(0, 1fr); }
+  .exchange-config-account > div > div:last-child { display: block; }
+  .exchange-config-account > div > div:last-child > div:last-child { display: inline-block; margin-top: 4px; }
+  .exchange-config-footer { padding-top: 14px; margin-top: 16px; }
+  .exchange-config-footer .ant-btn { flex: 1; }
+}

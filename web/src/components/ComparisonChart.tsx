@@ -1,3 +1,5 @@
+import { uiText } from '../i18n/uiText'
+import { Alert } from 'antd'
 import { useMemo } from 'react'
 import {
   LineChart,
@@ -31,7 +33,11 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
     .sort()
     .join(',')
 
-  const { data: allTraderHistories, isLoading } = useSWR(
+  const {
+    data: allTraderHistories,
+    isLoading,
+    error,
+  } = useSWR(
     traders.length > 0 ? `all-equity-histories-${tradersKey}` : null,
     async () => {
       // 使用批量API一次性获取所有trader的历史数据
@@ -144,18 +150,38 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
     return combined
   }, [allTraderHistories, traders])
 
+  if (error && !allTraderHistories)
+    return (
+      <Alert
+        showIcon
+        type="warning"
+        title={uiText('收益走势暂时无法加载', language)}
+        description={uiText(
+          '账户排行仍可查看，历史数据将在下次刷新时重试。',
+          language
+        )}
+      />
+    )
   if (isLoading) {
     return (
-      <div className="text-center py-16" style={{ color: '#848E9C' }}>
+      <div
+        className="text-center py-16"
+        style={{ color: 'var(--text-secondary)' }}
+      >
         <div className="spinner mx-auto mb-4"></div>
-        <div className="text-sm font-semibold">Loading comparison data...</div>
+        <div className="text-sm font-semibold">
+          {uiText('正在加载收益走势…', language)}
+        </div>
       </div>
     )
   }
 
   if (combinedData.length === 0) {
     return (
-      <div className="text-center py-16" style={{ color: '#848E9C' }}>
+      <div
+        className="text-center py-16"
+        style={{ color: 'var(--text-secondary)' }}
+      >
         <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-60" />
         <div className="text-lg font-semibold mb-2">
           {t('noHistoricalData', language)}
@@ -204,9 +230,15 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
       return (
         <div
           className="rounded p-3 shadow-xl"
-          style={{ background: '#1E2329', border: '1px solid #2B3139' }}
+          style={{
+            background: 'var(--panel-bg)',
+            border: '1px solid var(--panel-border)',
+          }}
         >
-          <div className="text-xs mb-2" style={{ color: '#848E9C' }}>
+          <div
+            className="text-xs mb-2"
+            style={{ color: 'var(--text-secondary)' }}
+          >
             {data.time} - #{data.index}
           </div>
           {traders.map((trader) => {
@@ -224,13 +256,18 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
                 </div>
                 <div
                   className="text-sm mono font-bold"
-                  style={{ color: pnlPct >= 0 ? '#0ECB81' : '#F6465D' }}
+                  style={{
+                    color:
+                      pnlPct >= 0
+                        ? 'var(--binance-green)'
+                        : 'var(--binance-red)',
+                  }}
                 >
                   {pnlPct >= 0 ? '+' : ''}
                   {pnlPct.toFixed(2)}%
                   <span
                     className="text-xs ml-2 font-normal"
-                    style={{ color: '#848E9C' }}
+                    style={{ color: 'var(--text-secondary)' }}
                   >
                     ({equity?.toFixed(2)} USDT)
                   </span>
@@ -246,13 +283,13 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
 
   // 计算当前差距
   const currentGap =
-    displayData.length > 0
+    displayData.length > 0 && traders.length > 1
       ? (() => {
           const lastPoint = displayData[displayData.length - 1]
           const values = traders.map(
             (t) => lastPoint[`${t.trader_id}_pnl_pct`] || 0
           )
-          return Math.abs(values[0] - values[1])
+          return Math.max(...values) - Math.min(...values)
         })()
       : 0
 
@@ -265,26 +302,12 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
           position: 'relative',
         }}
       >
-        {/* NOFX Watermark */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            color: 'rgba(240, 185, 11, 0.15)',
-            zIndex: 10,
-            pointerEvents: 'none',
-            fontFamily: 'monospace',
-          }}
-        >
-          NOFX
-        </div>
-        <ResponsiveContainer width="100%" height={520}>
+        {/* terminal Watermark */}
+
+        <ResponsiveContainer width="100%" height={310}>
           <LineChart
             data={displayData}
-            margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
+            margin={{ top: 20, right: 16, left: 0, bottom: 8 }}
           >
             <defs>
               {traders.map((trader) => (
@@ -310,23 +333,24 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
               ))}
             </defs>
 
-            <CartesianGrid strokeDasharray="3 3" stroke="#2B3139" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" />
 
             <XAxis
               dataKey="time"
               stroke="#5E6673"
-              tick={{ fill: '#848E9C', fontSize: 11 }}
-              tickLine={{ stroke: '#2B3139' }}
-              interval={Math.floor(displayData.length / 12)}
-              angle={-15}
-              textAnchor="end"
-              height={60}
+              tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+              tickLine={{ stroke: 'var(--panel-border)' }}
+              interval="preserveStartEnd"
+              minTickGap={40}
+              angle={0}
+              textAnchor="middle"
+              height={36}
             />
 
             <YAxis
               stroke="#5E6673"
-              tick={{ fill: '#848E9C', fontSize: 12 }}
-              tickLine={{ stroke: '#2B3139' }}
+              tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+              tickLine={{ stroke: 'var(--panel-border)' }}
               domain={calculateYDomain()}
               tickFormatter={(value) => `${value.toFixed(1)}%`}
               width={60}
@@ -336,14 +360,14 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
 
             <ReferenceLine
               y={0}
-              stroke="#474D57"
+              stroke="var(--panel-border-hover)"
               strokeDasharray="5 5"
               strokeWidth={1.5}
               label={{
-                value: 'Break Even',
-                fill: '#848E9C',
+                value: uiText('盈亏平衡', language),
+                fill: 'var(--text-secondary)',
                 fontSize: 11,
-                position: 'right',
+                position: 'insideTopRight',
               }}
             />
 
@@ -353,12 +377,8 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
                 type="monotone"
                 dataKey={`${trader.trader_id}_pnl_pct`}
                 stroke={traderColor(trader.trader_id)}
-                strokeWidth={3}
-                dot={
-                  displayData.length < 50
-                    ? { fill: traderColor(trader.trader_id), r: 3 }
-                    : false
-                }
+                strokeWidth={2}
+                dot={false}
                 activeDot={{
                   r: 6,
                   fill: traderColor(trader.trader_id),
@@ -382,8 +402,8 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
                   <span
                     style={{
                       color: entry.color,
-                      fontWeight: 600,
-                      fontSize: '14px',
+                      fontWeight: 400,
+                      fontSize: '12px',
                     }}
                   >
                     {trader?.trader_name} ({trader?.ai_model.toUpperCase()})
@@ -395,81 +415,18 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
         </ResponsiveContainer>
       </div>
 
-      {/* Stats */}
-      <div
-        className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pt-5"
-        style={{ borderTop: '1px solid #2B3139' }}
-      >
-        <div
-          className="p-2 md:p-3 rounded transition-all hover:bg-opacity-50"
-          style={{ background: 'rgba(240, 185, 11, 0.05)' }}
-        >
-          <div
-            className="text-xs mb-1 uppercase tracking-wider"
-            style={{ color: '#848E9C' }}
-          >
-            {t('comparisonMode', language)}
-          </div>
-          <div
-            className="text-sm md:text-base font-bold"
-            style={{ color: '#EAECEF' }}
-          >
-            PnL %
-          </div>
-        </div>
-        <div
-          className="p-2 md:p-3 rounded transition-all hover:bg-opacity-50"
-          style={{ background: 'rgba(240, 185, 11, 0.05)' }}
-        >
-          <div
-            className="text-xs mb-1 uppercase tracking-wider"
-            style={{ color: '#848E9C' }}
-          >
-            {t('dataPoints', language)}
-          </div>
-          <div
-            className="text-sm md:text-base font-bold mono"
-            style={{ color: '#EAECEF' }}
-          >
-            {t('count', language, { count: combinedData.length })}
-          </div>
-        </div>
-        <div
-          className="p-2 md:p-3 rounded transition-all hover:bg-opacity-50"
-          style={{ background: 'rgba(240, 185, 11, 0.05)' }}
-        >
-          <div
-            className="text-xs mb-1 uppercase tracking-wider"
-            style={{ color: '#848E9C' }}
-          >
-            {t('currentGap', language)}
-          </div>
-          <div
-            className="text-sm md:text-base font-bold mono"
-            style={{ color: currentGap > 1 ? '#F0B90B' : '#EAECEF' }}
-          >
-            {currentGap.toFixed(2)}%
-          </div>
-        </div>
-        <div
-          className="p-2 md:p-3 rounded transition-all hover:bg-opacity-50"
-          style={{ background: 'rgba(240, 185, 11, 0.05)' }}
-        >
-          <div
-            className="text-xs mb-1 uppercase tracking-wider"
-            style={{ color: '#848E9C' }}
-          >
-            {t('displayRange', language)}
-          </div>
-          <div
-            className="text-sm md:text-base font-bold mono"
-            style={{ color: '#EAECEF' }}
-          >
-            {combinedData.length > MAX_DISPLAY_POINTS
-              ? `${t('recent', language)} ${MAX_DISPLAY_POINTS}`
-              : t('allData', language)}
-          </div>
-        </div>
+      <div className="comparison-chart-caption">
+        <span>
+          {uiText('历史记录 ·', language)} {combinedData.length}{' '}
+          {uiText('个时间点', language)}
+        </span>
+        <span>
+          {traders.length > 1
+            ? language === 'zh'
+              ? `区间末收益率差 ${currentGap.toFixed(2)} 个百分点`
+              : `End-of-period return gap: ${currentGap.toFixed(2)} percentage points`
+            : uiText('单策略收益率走势', language)}
+        </span>
       </div>
     </div>
   )

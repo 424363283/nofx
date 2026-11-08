@@ -1,0 +1,219 @@
+.competition-overview {
+  --overview-line: #ffffff0d;
+  --overview-muted: #8b9f98;
+}
+.competition-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin: 4px 0 28px;
+}
+.competition-eyebrow {
+  color: #86b9a6;
+  font-size: 12px;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+.competition-heading h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.6px;
+}
+.competition-heading p {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--overview-muted);
+}
+.competition-refresh {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.competition-refresh > span {
+  font-size: 11px;
+  color: var(--overview-muted);
+}
+.competition-summary {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  margin-bottom: 24px;
+  background: #131d20;
+  border: 1px solid var(--overview-line);
+  border-radius: 12px;
+  padding: 24px 0;
+}
+.competition-summary > div {
+  padding: 0 28px;
+  border-right: 1px solid var(--overview-line);
+  min-width: 0;
+}
+.competition-summary > div:last-child {
+  border: 0;
+}
+.competition-summary span {
+  color: var(--overview-muted);
+  font-size: 12px;
+}
+.competition-summary strong {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 27px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  margin: 14px 0 8px;
+}
+.competition-summary small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--overview-muted);
+}
+.competition-summary p {
+  font-size: 11px;
+  color: #7d9588;
+  margin: 0;
+}
+.competition-overview .ant-card {
+  border-color: var(--overview-line);
+  border-radius: 12px;
+  background: #131d20;
+}
+.competition-overview .ant-card-head {
+  min-height: 60px;
+  border-color: var(--overview-line);
+}
+.competition-overview .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.competition-chart {
+  margin-bottom: 24px;
+}
+.competition-caption {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--overview-muted);
+}
+.comparison-chart-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 11px;
+  color: #7e9589;
+  border-top: 1px solid var(--overview-line);
+  padding-top: 16px;
+  margin-top: 12px;
+}
+.competition-ranking .ant-card-body {
+  padding: 8px 24px 20px;
+}
+.competition-overview .ant-table {
+  background: transparent;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.competition-overview .ant-table-thead > tr > th {
+  background: transparent;
+  color: #8ca69a;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-color: var(--overview-line);
+  padding: 16px;
+}
+.competition-overview .ant-table-thead > tr > th::before {
+  display: none !important;
+}
+.competition-overview .ant-table-tbody > tr > td {
+  border-color: var(--overview-line);
+  padding: 20px 16px;
+}
+.competition-overview .ant-table-tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+.competition-rank {
+  color: #8faaa0;
+  font-size: 12px;
+}
+.competition-identity {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.competition-identity > i {
+  width: 5px;
+  height: 28px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.competition-identity .ant-btn {
+  padding: 0;
+  height: auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: #dfebe4;
+}
+.competition-identity small {
+  display: block;
+  font-size: 10px;
+  color: #7e978a;
+  margin-top: 4px;
+}
+.competition-overview .positive {
+  color: #78c9a7;
+}
+.competition-overview .negative {
+  color: #e7a1aa;
+}
+.competition-overview .ant-badge-status-text {
+  font-size: 12px;
+  color: #92a89b;
+}
+.competition-footnote {
+  font-size: 11px;
+  color: #7c9486;
+  margin: 16px 0 0;
+  line-height: 1.7;
+}
+@media (max-width: 767px) {
+  .competition-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .competition-heading h1 {
+    font-size: 24px;
+  }
+  .competition-summary {
+    padding: 18px 0;
+  }
+  .competition-summary > div {
+    padding: 0 12px;
+  }
+  .competition-summary strong {
+    font-size: 20px;
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+  .competition-summary small {
+    font-size: 10px;
+  }
+  .competition-summary p {
+    font-size: 10px;
+  }
+  .competition-overview .ant-card-head {
+    padding: 0 16px;
+  }
+  .competition-overview .ant-card-body {
+    padding: 12px;
+  }
+  .competition-caption {
+    font-size: 10px;
+  }
+  .comparison-chart-caption {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Get 获取指定代币的市场数据
@@ -67,7 +68,11 @@ func Get(symbol string) (*Data, error) {
 	intradayData := calculateIntradaySeries(klines3m)
 
 	// 计算长期数据
-	longerTermData := calculateLongerTermData(klines4h)
+	closed4h := closedMarketKlines(klines4h, time.Now())
+	var longerTermData *LongerTermData
+	if len(closed4h) >= 50 {
+		longerTermData = calculateLongerTermData(closed4h)
+	}
 
 	return &Data{
 		Symbol:            symbol,
@@ -82,6 +87,16 @@ func Get(symbol string) (*Data, error) {
 		IntradaySeries:    intradayData,
 		LongerTermContext: longerTermData,
 	}, nil
+}
+
+func closedMarketKlines(bars []Kline, now time.Time) []Kline {
+	closed := make([]Kline, 0, len(bars))
+	for _, bar := range bars {
+		if bar.CloseTime > 0 && bar.CloseTime < now.UnixMilli() {
+			closed = append(closed, bar)
+		}
+	}
+	return closed
 }
 
 // calculateEMA 计算EMA
@@ -260,6 +275,8 @@ func calculateLongerTermData(klines []Kline) *LongerTermData {
 
 	// 计算成交量
 	if len(klines) > 0 {
+		data.CandleAt = time.UnixMilli(klines[len(klines)-1].CloseTime + 1).UTC()
+		data.LastClose = klines[len(klines)-1].Close
 		data.CurrentVolume = klines[len(klines)-1].Volume
 		// 计算平均成交量
 		sum := 0.0
@@ -361,7 +378,8 @@ func Format(data *Data) string {
 
 	// 使用动态精度格式化价格
 	priceStr := formatPriceWithDynamicPrecision(data.CurrentPrice)
-	sb.WriteString(fmt.Sprintf("current_price = %s, current_ema20 = %.3f, current_macd = %.3f, current_rsi (7 period) = %.3f\n\n",
+	sb.WriteString("3分钟最新指标可能包含未收盘K线，仅作辅助，不能作为已收盘入场触发。\n")
+	sb.WriteString(fmt.Sprintf("current_price = %s, current_ema20 = %.12g, current_macd = %.12g, current_rsi (7 period) = %.3f\n\n",
 		priceStr, data.CurrentEMA20, data.CurrentMACD, data.CurrentRSI7))
 
 	sb.WriteString(fmt.Sprintf("In addition, here is the latest %s open interest and funding rate for perps:\n\n",
@@ -402,12 +420,13 @@ func Format(data *Data) string {
 	}
 
 	if data.LongerTermContext != nil {
-		sb.WriteString("Longer‑term context (4‑hour timeframe):\n\n")
+		sb.WriteString("Longer‑term context (4‑hour timeframe, closed candles only):\n\n")
+		sb.WriteString(fmt.Sprintf("Last closed candle: %s | close: %.12g\n", data.LongerTermContext.CandleAt.Format(time.RFC3339), data.LongerTermContext.LastClose))
 
-		sb.WriteString(fmt.Sprintf("20‑Period EMA: %.3f vs. 50‑Period EMA: %.3f\n\n",
+		sb.WriteString(fmt.Sprintf("20‑Period EMA: %.12g vs. 50‑Period EMA: %.12g\n\n",
 			data.LongerTermContext.EMA20, data.LongerTermContext.EMA50))
 
-		sb.WriteString(fmt.Sprintf("3‑Period ATR: %.3f vs. 14‑Period ATR: %.3f\n\n",
+		sb.WriteString(fmt.Sprintf("3‑Period ATR: %.12g vs. 14‑Period ATR: %.12g\n\n",
 			data.LongerTermContext.ATR3, data.LongerTermContext.ATR14))
 
 		sb.WriteString(fmt.Sprintf("Current Volume: %.3f vs. Average Volume: %.3f\n\n",
@@ -420,6 +439,8 @@ func Format(data *Data) string {
 		if len(data.LongerTermContext.RSI14Values) > 0 {
 			sb.WriteString(fmt.Sprintf("RSI indicators (14‑Period): %s\n\n", formatFloatSlice(data.LongerTermContext.RSI14Values)))
 		}
+	} else {
+		sb.WriteString("4小时已收盘历史不足50根：趋势数据不足，不得将缺失EMA当作0或明确反向趋势。\n")
 	}
 
 	return sb.String()
@@ -460,7 +481,7 @@ func formatPriceWithDynamicPrecision(price float64) string {
 func formatFloatSlice(values []float64) string {
 	strValues := make([]string, len(values))
 	for i, v := range values {
-		strValues[i] = formatPriceWithDynamicPrecision(v)
+		strValues[i] = strconv.FormatFloat(v, 'g', 12, 64)
 	}
 	return "[" + strings.Join(strValues, ", ") + "]"
 }

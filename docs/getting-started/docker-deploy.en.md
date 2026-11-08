@@ -1,6 +1,6 @@
 # 🐳 Docker One-Click Deployment Guide
 
-This guide will help you quickly deploy the NOFX AI Trading Competition System using Docker.
+This guide will help you quickly deploy the GUANLAN AI Trading Competition System using Docker.
 
 ## 📋 Prerequisites
 
@@ -276,8 +276,8 @@ kill -9 <PID>
 
 ```bash
 # Check health status
-docker inspect nofx-backend | jq '.[0].State.Health'
-docker inspect nofx-frontend | jq '.[0].State.Health'
+docker inspect guanlan-backend | jq '.[0].State.Health'
+docker inspect guanlan-frontend | jq '.[0].State.Health'
 
 # Manually test health endpoints
 curl http://localhost:8080/api/health
@@ -347,7 +347,7 @@ docker system prune -a --volumes
 ### Using Nginx Reverse Proxy
 
 ```nginx
-# /etc/nginx/sites-available/nofx
+# /etc/nginx/sites-available/guanlan
 server {
     listen 80;
     server_name your-domain.com;
@@ -386,13 +386,13 @@ sudo certbot renew --dry-run
 docker swarm init
 
 # Deploy stack
-docker stack deploy -c docker-compose.yml nofx
+docker stack deploy -c docker-compose.yml guanlan
 
 # View service status
-docker stack services nofx
+docker stack services guanlan
 
 # Scale services
-docker service scale nofx_backend=3
+docker service scale guanlan_backend=3
 ```
 
 ## 📈 Monitoring & Logging
@@ -433,7 +433,7 @@ services:
 
 ## 🆘 Get Help
 
-- **GitHub Issues**: [Submit an issue](https://github.com/yourusername/open-nofx/issues)
+- **GitHub Issues**: [Submit an issue](#)
 - **Documentation**: Check [README.md](README.md)
 - **Community**: Join our Discord/Telegram group
 
@@ -468,6 +468,6 @@ docker system prune -a             # Clean Docker resources
 
 ---
 
-🎉 Congratulations! You've successfully deployed the NOFX AI Trading Competition System!
+🎉 Congratulations! You've successfully deployed the GUANLAN AI Trading Competition System!
 
 If you encounter any issues, please check the [Troubleshooting](#-troubleshooting) section or submit an issue.

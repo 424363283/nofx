@@ -1,5 +1,5 @@
+import { UiDialog, UiInput, UiButton } from './design/Controls'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { t, type Language } from '../i18n/translations'
 
 const DEFAULT_LENGTH = 64
@@ -165,8 +165,8 @@ export function TwoStageKeyModal({
     if (!isOpen) return null
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-        <div className="bg-gray-900 p-8 rounded-xl max-w-lg w-full mx-4 border border-gray-700">
+      <UiDialog onClose={onCancel} width={600}>
+        <div>
           <div className="text-center mb-6">
             <h2 className="text-xl font-bold text-white mb-2">
               🔐 {t('twoStageKey.title', language)}
@@ -195,7 +195,7 @@ export function TwoStageKeyModal({
                   {t('twoStageKey.stage1InputLabel', language)} (
                   {expectedPart1Length} {t('twoStageKey.characters', language)})
                 </label>
-                <input
+                <UiInput
                   ref={stage1Ref}
                   type="password"
                   value={part1}
@@ -210,7 +210,7 @@ export function TwoStageKeyModal({
               {error && <div className="text-red-400 text-sm">{error}</div>}
 
               <div className="flex gap-3">
-                <button
+                <UiButton
                   onClick={handleStage1Next}
                   disabled={part1.length < expectedPart1Length || processing}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
@@ -218,14 +218,14 @@ export function TwoStageKeyModal({
                   {processing
                     ? t('twoStageKey.processing', language)
                     : t('twoStageKey.nextButton', language)}
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   onClick={onCancel}
                   disabled={processing}
                   className="px-6 py-3 text-gray-300 hover:text-white border border-gray-600 rounded-lg transition-colors"
                 >
                   {t('twoStageKey.cancelButton', language)}
-                </button>
+                </UiButton>
               </div>
             </div>
           )}
@@ -267,7 +267,7 @@ export function TwoStageKeyModal({
                   {t('twoStageKey.stage2InputLabel', language)} (
                   {expectedPart2Length} {t('twoStageKey.characters', language)})
                 </label>
-                <input
+                <UiInput
                   ref={stage2Ref}
                   type="password"
                   value={part2}
@@ -281,24 +281,24 @@ export function TwoStageKeyModal({
               {error && <div className="text-red-400 text-sm">{error}</div>}
 
               <div className="flex gap-3">
-                <button
+                <UiButton
                   onClick={handleStage2Complete}
                   disabled={part2.length < expectedPart2Length}
                   className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
                 >
                   🔒 {t('twoStageKey.encryptButton', language)}
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   onClick={handleReset}
                   className="px-6 py-3 text-gray-300 hover:text-white border border-gray-600 rounded-lg transition-colors"
                 >
                   {t('twoStageKey.backButton', language)}
-                </button>
+                </UiButton>
               </div>
             </div>
           )}
         </div>
-      </div>
+      </UiDialog>
     )
   }, [
     isOpen,
@@ -320,5 +320,5 @@ export function TwoStageKeyModal({
 
   if (!isOpen) return null
 
-  return createPortal(modalContent, document.body)
+  return modalContent
 }

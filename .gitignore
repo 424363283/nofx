@@ -7,10 +7,10 @@
 .claude/
 
 # 编译产物
-nofx-auto
+guanlan-auto
 *.exe
-nofx
-nofx_test
+guanlan
+guanlan_test
 
 # Go 相关
 *.test
@@ -35,7 +35,7 @@ configbak.json
 # 决策日志
 decision_logs/
 coin_pool_cache/
-nofx_test
+guanlan_test
 
 # Node.js
 web/node_modules/
@@ -62,3 +62,10 @@ rsa_key*
 # 加密相关
 DATA_ENCRYPTION_KEY=*
 *.enc
+# Persistent forward-observation ledger
+signal-archive.db
+signal-archive.db-wal
+signal-archive.db-shm
+
+# 本地运行进程、日志和备份
+.local-run/

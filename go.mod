@@ -1,4 +1,4 @@
-module nofx
+module guanlan
 
 go 1.25.0
 

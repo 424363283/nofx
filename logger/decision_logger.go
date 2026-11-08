@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -50,15 +51,18 @@ type PositionSnapshot struct {
 
 // DecisionAction 决策动作
 type DecisionAction struct {
-	Action    string    `json:"action"`    // open_long, open_short, close_long, close_short, update_stop_loss, update_take_profit, partial_close
-	Symbol    string    `json:"symbol"`    // 币种
-	Quantity  float64   `json:"quantity"`  // 数量（部分平仓时使用）
-	Leverage  int       `json:"leverage"`  // 杠杆（开仓时）
-	Price     float64   `json:"price"`     // 执行价格
-	OrderID   int64     `json:"order_id"`  // 订单ID
-	Timestamp time.Time `json:"timestamp"` // 执行时间
-	Success   bool      `json:"success"`   // 是否成功
-	Error     string    `json:"error"`     // 错误信息
+	StopLoss         float64   `json:"stop_loss,omitempty"`
+	TakeProfit       float64   `json:"take_profit,omitempty"`
+	ProtectionStatus string    `json:"protection_status,omitempty"`
+	Action           string    `json:"action"`    // open_long, open_short, close_long, close_short, update_stop_loss, update_take_profit, partial_close
+	Symbol           string    `json:"symbol"`    // 币种
+	Quantity         float64   `json:"quantity"`  // 数量（部分平仓时使用）
+	Leverage         int       `json:"leverage"`  // 杠杆（开仓时）
+	Price            float64   `json:"price"`     // 执行价格
+	OrderID          int64     `json:"order_id"`  // 订单ID
+	Timestamp        time.Time `json:"timestamp"` // 执行时间
+	Success          bool      `json:"success"`   // 是否成功
+	Error            string    `json:"error"`     // 错误信息
 }
 
 // DecisionLogger 决策日志记录器
@@ -119,10 +123,9 @@ func (l *DecisionLogger) GetLatestRecords(n int) ([]*DecisionRecord, error) {
 		return nil, fmt.Errorf("读取日志目录失败: %w", err)
 	}
 
-	// 先按修改时间倒序收集（最新的在前）
+	// Read records before truncation: filename order is not reliable for same-second cycles.
 	var records []*DecisionRecord
-	count := 0
-	for i := len(files) - 1; i >= 0 && count < n; i-- {
+	for i := len(files) - 1; i >= 0; i-- {
 		file := files[i]
 		if file.IsDir() {
 			continue
@@ -140,12 +143,19 @@ func (l *DecisionLogger) GetLatestRecords(n int) ([]*DecisionRecord, error) {
 		}
 
 		records = append(records, &record)
-		count++
 	}
 
-	// 反转数组，让时间从旧到新排列（用于图表显示）
-	for i, j := 0, len(records)-1; i < j; i, j = i+1, j-1 {
-		records[i], records[j] = records[j], records[i]
+	sort.SliceStable(records, func(i, j int) bool {
+		if records[i].Timestamp.Equal(records[j].Timestamp) {
+			return records[i].CycleNumber < records[j].CycleNumber
+		}
+		return records[i].Timestamp.Before(records[j].Timestamp)
+	})
+	if n <= 0 {
+		return []*DecisionRecord{}, nil
+	}
+	if len(records) > n {
+		records = records[len(records)-n:]
 	}
 
 	return records, nil

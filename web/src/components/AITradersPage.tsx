@@ -1,5 +1,17 @@
+import './design/exchange-dialog.css'
+import { uiText } from '../i18n/uiText'
+import { TradersManagementView } from './TradersManagementView'
+import { UiCheckLabel } from './design/Controls'
+import { App as AntApp, Tooltip as AntTooltip, Alert as AntAlert } from 'antd'
+import {
+  UiButton,
+  UiDialog,
+  UiForm,
+  UiInput,
+  UiSelect,
+} from './design/Controls'
 import React, { useState, useEffect } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate as mutateCache } from 'swr'
 import { api } from '../lib/api'
 import type {
   TraderInfo,
@@ -17,32 +29,7 @@ import {
   TwoStageKeyModal,
   type TwoStageKeyModalResult,
 } from './TwoStageKeyModal'
-import {
-  Bot,
-  Brain,
-  Landmark,
-  BarChart3,
-  Trash2,
-  Plus,
-  Users,
-  AlertTriangle,
-  BookOpen,
-  HelpCircle,
-} from 'lucide-react'
-
-// 获取友好的AI模型名称
-function getModelDisplayName(modelId: string): string {
-  switch (modelId.toLowerCase()) {
-    case 'deepseek':
-      return 'DeepSeek'
-    case 'qwen':
-      return 'Qwen'
-    case 'claude':
-      return 'Claude'
-    default:
-      return modelId.toUpperCase()
-  }
-}
+import { Trash2, AlertTriangle, BookOpen, HelpCircle } from 'lucide-react'
 
 // 提取下划线后面的名称部分
 function getShortName(fullName: string): string {
@@ -55,6 +42,7 @@ interface AITradersPageProps {
 }
 
 export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
+  const { message, modal } = AntApp.useApp()
   const { language } = useLanguage()
   const { user, token } = useAuth()
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -78,7 +66,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
   })
 
   const { data: traders, mutate: mutateTraders } = useSWR<TraderInfo[]>(
-    user && token ? 'traders' : null,
+    user && token ? ['traders', user.id] : null,
     api.getTraders,
     { refreshInterval: 5000 }
   )
@@ -126,7 +114,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
             oiTopUrl: signalSource.oi_top_url || '',
           })
         } catch (error) {
-          console.log('📡 用户信号源配置暂未设置')
+          console.log(uiText('📡 用户信号源配置暂未设置', language))
         }
       } catch (error) {
         console.error('Failed to load configs:', error)
@@ -219,13 +207,11 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       const exchange = allExchanges?.find((e) => e.id === data.exchange_id)
 
       if (!model?.enabled) {
-        alert(t('modelNotConfigured', language))
-        return
+        throw new Error(t('modelNotConfigured', language))
       }
 
       if (!exchange?.enabled) {
-        alert(t('exchangeNotConfigured', language))
-        return
+        throw new Error(t('exchangeNotConfigured', language))
       }
 
       await api.createTrader(data)
@@ -233,7 +219,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       mutateTraders()
     } catch (error) {
       console.error('Failed to create trader:', error)
-      alert(t('createTraderFailed', language))
+      throw error
     }
   }
 
@@ -244,7 +230,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       setShowEditModal(true)
     } catch (error) {
       console.error('Failed to fetch trader config:', error)
-      alert(t('getTraderConfigFailed', language))
+      message.error(t('getTraderConfigFailed', language))
     }
   }
 
@@ -256,13 +242,11 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       const exchange = enabledExchanges?.find((e) => e.id === data.exchange_id)
 
       if (!model) {
-        alert(t('modelConfigNotExist', language))
-        return
+        throw new Error(t('modelConfigNotExist', language))
       }
 
       if (!exchange) {
-        alert(t('exchangeConfigNotExist', language))
-        return
+        throw new Error(t('exchangeConfigNotExist', language))
       }
 
       const request = {
@@ -278,6 +262,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         override_base_prompt: data.override_base_prompt,
         is_cross_margin: data.is_cross_margin,
         use_coin_pool: data.use_coin_pool,
+        signal_config: data.signal_config,
         use_oi_top: data.use_oi_top,
       }
 
@@ -287,19 +272,27 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       mutateTraders()
     } catch (error) {
       console.error('Failed to update trader:', error)
-      alert(t('updateTraderFailed', language))
+      throw error
     }
   }
 
   const handleDeleteTrader = async (traderId: string) => {
-    if (!confirm(t('confirmDeleteTrader', language))) return
+    if (
+      !(await modal.confirm({
+        title: t('confirmDeleteTrader', language),
+        okText: uiText('删除', language),
+        cancelText: uiText('取消', language),
+        okButtonProps: { danger: true },
+      }))
+    )
+      return
 
     try {
       await api.deleteTrader(traderId)
-      mutateTraders()
+      await Promise.all([mutateTraders(), mutateCache('competition')])
     } catch (error) {
       console.error('Failed to delete trader:', error)
-      alert(t('deleteTraderFailed', language))
+      message.error(t('deleteTraderFailed', language))
     }
   }
 
@@ -313,7 +306,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       mutateTraders()
     } catch (error) {
       console.error('Failed to toggle trader:', error)
-      alert(t('operationFailed', language))
+      message.error(t('operationFailed', language))
     }
   }
 
@@ -352,7 +345,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     if (config.checkInUse(config.id)) {
       const usingTraders = config.getUsingTraders(config.id)
       const traderNames = usingTraders.map((t) => t.trader_name).join(', ')
-      alert(
+      message.error(
         t(config.cannotDeleteKey, language) +
           '\n\n' +
           t('tradersUsing', language) +
@@ -364,7 +357,15 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       return
     }
 
-    if (!confirm(t(config.confirmDeleteKey, language))) return
+    if (
+      !(await modal.confirm({
+        title: t(config.confirmDeleteKey, language),
+        okText: uiText('删除', language),
+        cancelText: uiText('取消', language),
+        okButtonProps: { danger: true },
+      }))
+    )
+      return
 
     try {
       const updatedItems =
@@ -382,7 +383,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       config.closeModal()
     } catch (error) {
       console.error(`Failed to delete ${config.type} config:`, error)
-      alert(t(config.errorKey, language))
+      message.error(t(config.errorKey, language))
     }
   }
 
@@ -444,7 +445,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       const modelToUpdate =
         existingModel || supportedModels?.find((m) => m.id === modelId)
       if (!modelToUpdate) {
-        alert(t('modelNotExist', language))
+        message.error(t('modelNotExist', language))
         return
       }
 
@@ -498,7 +499,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       setEditingModel(null)
     } catch (error) {
       console.error('Failed to save model config:', error)
-      alert(t('saveConfigFailed', language))
+      message.error(t('saveConfigFailed', language))
     }
   }
 
@@ -523,7 +524,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       }),
       buildRequest: (exchanges) => ({
         exchanges: Object.fromEntries(
-          exchanges.map((exchange) => [
+          exchanges.filter((exchange) => exchange.id === exchangeId).map((exchange) => [
             exchange.id,
             {
               enabled: exchange.enabled,
@@ -568,7 +569,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         (e) => e.id === exchangeId
       )
       if (!exchangeToUpdate) {
-        alert(t('exchangeNotExist', language))
+        message.error(t('exchangeNotExist', language))
         return
       }
 
@@ -612,7 +613,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
 
       const request = {
         exchanges: Object.fromEntries(
-          updatedExchanges.map((exchange) => [
+          updatedExchanges.filter((exchange) => exchange.id === exchangeId).map((exchange) => [
             exchange.id,
             {
               enabled: exchange.enabled,
@@ -638,7 +639,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       setEditingExchange(null)
     } catch (error) {
       console.error('Failed to save exchange config:', error)
-      alert(t('saveConfigFailed', language))
+      message.error(t('saveConfigFailed', language))
     }
   }
 
@@ -662,488 +663,34 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       setShowSignalSourceModal(false)
     } catch (error) {
       console.error('Failed to save signal source:', error)
-      alert(t('saveSignalSourceFailed', language))
+      message.error(t('saveSignalSourceFailed', language))
     }
   }
 
   return (
     <div className="space-y-4 md:space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-0">
-        <div className="flex items-center gap-3 md:gap-4">
-          <div
-            className="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center"
-            style={{
-              background: 'linear-gradient(135deg, #F0B90B 0%, #FCD535 100%)',
-              boxShadow: '0 4px 14px rgba(240, 185, 11, 0.4)',
-            }}
-          >
-            <Bot className="w-5 h-5 md:w-6 md:h-6" style={{ color: '#000' }} />
-          </div>
-          <div>
-            <h1
-              className="text-xl md:text-2xl font-bold flex items-center gap-2"
-              style={{ color: '#EAECEF' }}
-            >
-              {t('aiTraders', language)}
-              <span
-                className="text-xs font-normal px-2 py-1 rounded"
-                style={{
-                  background: 'rgba(240, 185, 11, 0.15)',
-                  color: '#F0B90B',
-                }}
-              >
-                {traders?.length || 0} {t('active', language)}
-              </span>
-            </h1>
-            <p className="text-xs" style={{ color: '#848E9C' }}>
-              {t('manageAITraders', language)}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex gap-2 md:gap-3 w-full md:w-auto overflow-x-auto flex-wrap md:flex-nowrap">
-          <button
-            onClick={handleAddModel}
-            className="px-3 md:px-4 py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 flex items-center gap-1 md:gap-2 whitespace-nowrap"
-            style={{
-              background: '#2B3139',
-              color: '#EAECEF',
-              border: '1px solid #474D57',
-            }}
-          >
-            <Plus className="w-3 h-3 md:w-4 md:h-4" />
-            {t('aiModels', language)}
-          </button>
-
-          <button
-            onClick={handleAddExchange}
-            className="px-3 md:px-4 py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 flex items-center gap-1 md:gap-2 whitespace-nowrap"
-            style={{
-              background: '#2B3139',
-              color: '#EAECEF',
-              border: '1px solid #474D57',
-            }}
-          >
-            <Plus className="w-3 h-3 md:w-4 md:h-4" />
-            {t('exchanges', language)}
-          </button>
-
-          <button
-            onClick={() => setShowSignalSourceModal(true)}
-            className="px-3 md:px-4 py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 whitespace-nowrap"
-            style={{
-              background: '#2B3139',
-              color: '#EAECEF',
-              border: '1px solid #474D57',
-            }}
-          >
-            📡 {t('signalSource', language)}
-          </button>
-
-          <button
-            onClick={() => setShowCreateModal(true)}
-            disabled={
-              configuredModels.length === 0 || configuredExchanges.length === 0
-            }
-            className="px-3 md:px-4 py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 md:gap-2 whitespace-nowrap"
-            style={{
-              background:
-                configuredModels.length > 0 && configuredExchanges.length > 0
-                  ? '#F0B90B'
-                  : '#2B3139',
-              color:
-                configuredModels.length > 0 && configuredExchanges.length > 0
-                  ? '#000'
-                  : '#848E9C',
-            }}
-          >
-            <Plus className="w-4 h-4" />
-            {t('createTrader', language)}
-          </button>
-        </div>
-      </div>
-
-      {/* 信号源配置警告 */}
-      {traders &&
-        traders.some((t) => t.use_coin_pool || t.use_oi_top) &&
-        !userSignalSource.coinPoolUrl &&
-        !userSignalSource.oiTopUrl && (
-          <div
-            className="rounded-lg px-4 py-3 flex items-start gap-3 animate-slide-in"
-            style={{
-              background: 'rgba(246, 70, 93, 0.1)',
-              border: '1px solid rgba(246, 70, 93, 0.3)',
-            }}
-          >
-            <AlertTriangle
-              size={20}
-              className="flex-shrink-0 mt-0.5"
-              style={{ color: '#F6465D' }}
-            />
-            <div className="flex-1">
-              <div className="font-semibold mb-1" style={{ color: '#F6465D' }}>
-                ⚠️ {t('signalSourceNotConfigured', language)}
-              </div>
-              <div className="text-sm" style={{ color: '#848E9C' }}>
-                <p className="mb-2">
-                  {t('signalSourceWarningMessage', language)}
-                </p>
-                <p>
-                  <strong>{t('solutions', language)}</strong>
-                </p>
-                <ul className="list-disc list-inside space-y-1 ml-2 mt-1">
-                  <li>点击"📡 {t('signalSource', language)}"按钮配置API地址</li>
-                  <li>或在交易员配置中禁用"使用币种池"和"使用OI Top"</li>
-                  <li>或在交易员配置中设置自定义币种列表</li>
-                </ul>
-              </div>
-              <button
-                onClick={() => setShowSignalSourceModal(true)}
-                className="mt-3 px-3 py-1.5 rounded text-sm font-semibold transition-all hover:scale-105"
-                style={{
-                  background: '#F0B90B',
-                  color: '#000',
-                }}
-              >
-                {t('configureSignalSourceNow', language)}
-              </button>
-            </div>
-          </div>
-        )}
-
-      {/* Configuration Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* AI Models */}
-        <div className="binance-card p-3 md:p-4">
-          <h3
-            className="text-base md:text-lg font-semibold mb-3 flex items-center gap-2"
-            style={{ color: '#EAECEF' }}
-          >
-            <Brain
-              className="w-4 h-4 md:w-5 md:h-5"
-              style={{ color: '#60a5fa' }}
-            />
-            {t('aiModels', language)}
-          </h3>
-          <div className="space-y-2 md:space-y-3">
-            {configuredModels.map((model) => {
-              const inUse = isModelInUse(model.id)
-              return (
-                <div
-                  key={model.id}
-                  className={`flex items-center justify-between p-2 md:p-3 rounded transition-all ${
-                    inUse
-                      ? 'cursor-not-allowed'
-                      : 'cursor-pointer hover:bg-gray-700'
-                  }`}
-                  style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
-                  onClick={() => handleModelClick(model.id)}
-                >
-                  <div className="flex items-center gap-2 md:gap-3">
-                    <div className="w-7 h-7 md:w-8 md:h-8 flex items-center justify-center flex-shrink-0">
-                      {getModelIcon(model.provider || model.id, {
-                        width: 28,
-                        height: 28,
-                      }) || (
-                        <div
-                          className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-bold"
-                          style={{
-                            background:
-                              model.id === 'deepseek' ? '#60a5fa' : '#c084fc',
-                            color: '#fff',
-                          }}
-                        >
-                          {getShortName(model.name)[0]}
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div
-                        className="font-semibold text-sm md:text-base truncate"
-                        style={{ color: '#EAECEF' }}
-                      >
-                        {getShortName(model.name)}
-                      </div>
-                      <div className="text-xs" style={{ color: '#848E9C' }}>
-                        {inUse
-                          ? t('inUse', language)
-                          : model.enabled
-                            ? t('enabled', language)
-                            : t('configured', language)}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    className={`w-2.5 h-2.5 md:w-3 md:h-3 rounded-full flex-shrink-0 ${model.enabled ? 'bg-green-400' : 'bg-gray-500'}`}
-                  />
-                </div>
-              )
-            })}
-            {configuredModels.length === 0 && (
-              <div
-                className="text-center py-6 md:py-8"
-                style={{ color: '#848E9C' }}
-              >
-                <Brain className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 opacity-50" />
-                <div className="text-xs md:text-sm">
-                  {t('noModelsConfigured', language)}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Exchanges */}
-        <div className="binance-card p-3 md:p-4">
-          <h3
-            className="text-base md:text-lg font-semibold mb-3 flex items-center gap-2"
-            style={{ color: '#EAECEF' }}
-          >
-            <Landmark
-              className="w-4 h-4 md:w-5 md:h-5"
-              style={{ color: '#F0B90B' }}
-            />
-            {t('exchanges', language)}
-          </h3>
-          <div className="space-y-2 md:space-y-3">
-            {configuredExchanges.map((exchange) => {
-              const inUse = isExchangeInUse(exchange.id)
-              return (
-                <div
-                  key={exchange.id}
-                  className={`flex items-center justify-between p-2 md:p-3 rounded transition-all ${
-                    inUse
-                      ? 'cursor-not-allowed'
-                      : 'cursor-pointer hover:bg-gray-700'
-                  }`}
-                  style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
-                  onClick={() => handleExchangeClick(exchange.id)}
-                >
-                  <div className="flex items-center gap-2 md:gap-3">
-                    <div className="w-7 h-7 md:w-8 md:h-8 flex items-center justify-center flex-shrink-0">
-                      {getExchangeIcon(exchange.id, { width: 28, height: 28 })}
-                    </div>
-                    <div className="min-w-0">
-                      <div
-                        className="font-semibold text-sm md:text-base truncate"
-                        style={{ color: '#EAECEF' }}
-                      >
-                        {getShortName(exchange.name)}
-                      </div>
-                      <div className="text-xs" style={{ color: '#848E9C' }}>
-                        {exchange.type.toUpperCase()} •{' '}
-                        {inUse
-                          ? t('inUse', language)
-                          : exchange.enabled
-                            ? t('enabled', language)
-                            : t('configured', language)}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    className={`w-2.5 h-2.5 md:w-3 md:h-3 rounded-full flex-shrink-0 ${exchange.enabled ? 'bg-green-400' : 'bg-gray-500'}`}
-                  />
-                </div>
-              )
-            })}
-            {configuredExchanges.length === 0 && (
-              <div
-                className="text-center py-6 md:py-8"
-                style={{ color: '#848E9C' }}
-              >
-                <Landmark className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 opacity-50" />
-                <div className="text-xs md:text-sm">
-                  {t('noExchangesConfigured', language)}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Traders List */}
-      <div className="binance-card p-4 md:p-6">
-        <div className="flex items-center justify-between mb-4 md:mb-5">
-          <h2
-            className="text-lg md:text-xl font-bold flex items-center gap-2"
-            style={{ color: '#EAECEF' }}
-          >
-            <Users
-              className="w-5 h-5 md:w-6 md:h-6"
-              style={{ color: '#F0B90B' }}
-            />
-            {t('currentTraders', language)}
-          </h2>
-        </div>
-
-        {traders && traders.length > 0 ? (
-          <div className="space-y-3 md:space-y-4">
-            {traders.map((trader) => (
-              <div
-                key={trader.trader_id}
-                className="flex flex-col md:flex-row md:items-center justify-between p-3 md:p-4 rounded transition-all hover:translate-y-[-1px] gap-3 md:gap-4"
-                style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
-              >
-                <div className="flex items-center gap-3 md:gap-4">
-                  <div
-                    className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{
-                      background: trader.ai_model.includes('deepseek')
-                        ? '#60a5fa'
-                        : '#c084fc',
-                      color: '#fff',
-                    }}
-                  >
-                    <Bot className="w-5 h-5 md:w-6 md:h-6" />
-                  </div>
-                  <div className="min-w-0">
-                    <div
-                      className="font-bold text-base md:text-lg truncate"
-                      style={{ color: '#EAECEF' }}
-                    >
-                      {trader.trader_name}
-                    </div>
-                    <div
-                      className="text-xs md:text-sm truncate"
-                      style={{
-                        color: trader.ai_model.includes('deepseek')
-                          ? '#60a5fa'
-                          : '#c084fc',
-                      }}
-                    >
-                      {getModelDisplayName(
-                        trader.ai_model.split('_').pop() || trader.ai_model
-                      )}{' '}
-                      Model • {trader.exchange_id?.toUpperCase()}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 md:gap-4 flex-wrap md:flex-nowrap">
-                  {/* Status */}
-                  <div className="text-center">
-                    <div className="text-xs mb-1" style={{ color: '#848E9C' }}>
-                      {t('status', language)}
-                    </div>
-                    <div
-                      className={`px-2 md:px-3 py-1 rounded text-xs font-bold ${
-                        trader.is_running
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                      style={
-                        trader.is_running
-                          ? {
-                              background: 'rgba(14, 203, 129, 0.1)',
-                              color: '#0ECB81',
-                            }
-                          : {
-                              background: 'rgba(246, 70, 93, 0.1)',
-                              color: '#F6465D',
-                            }
-                      }
-                    >
-                      {trader.is_running
-                        ? t('running', language)
-                        : t('stopped', language)}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-1.5 md:gap-2 flex-wrap md:flex-nowrap">
-                    <button
-                      onClick={() => onTraderSelect?.(trader.trader_id)}
-                      className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 flex items-center gap-1 whitespace-nowrap"
-                      style={{
-                        background: 'rgba(99, 102, 241, 0.1)',
-                        color: '#6366F1',
-                      }}
-                    >
-                      <BarChart3 className="w-3 h-3 md:w-4 md:h-4" />
-                      {t('view', language)}
-                    </button>
-
-                    <button
-                      onClick={() => handleEditTrader(trader.trader_id)}
-                      disabled={trader.is_running}
-                      className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      style={{
-                        background: trader.is_running
-                          ? 'rgba(132, 142, 156, 0.1)'
-                          : 'rgba(255, 193, 7, 0.1)',
-                        color: trader.is_running ? '#848E9C' : '#FFC107',
-                      }}
-                    >
-                      ✏️ {t('edit', language)}
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        handleToggleTrader(
-                          trader.trader_id,
-                          trader.is_running || false
-                        )
-                      }
-                      className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105 whitespace-nowrap"
-                      style={
-                        trader.is_running
-                          ? {
-                              background: 'rgba(246, 70, 93, 0.1)',
-                              color: '#F6465D',
-                            }
-                          : {
-                              background: 'rgba(14, 203, 129, 0.1)',
-                              color: '#0ECB81',
-                            }
-                      }
-                    >
-                      {trader.is_running
-                        ? t('stop', language)
-                        : t('start', language)}
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteTrader(trader.trader_id)}
-                      className="px-2 md:px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-semibold transition-all hover:scale-105"
-                      style={{
-                        background: 'rgba(246, 70, 93, 0.1)',
-                        color: '#F6465D',
-                      }}
-                    >
-                      <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div
-            className="text-center py-12 md:py-16"
-            style={{ color: '#848E9C' }}
-          >
-            <Bot className="w-16 h-16 md:w-24 md:h-24 mx-auto mb-3 md:mb-4 opacity-50" />
-            <div className="text-base md:text-lg font-semibold mb-2">
-              {t('noTraders', language)}
-            </div>
-            <div className="text-xs md:text-sm mb-3 md:mb-4">
-              {t('createFirstTrader', language)}
-            </div>
-            {(configuredModels.length === 0 ||
-              configuredExchanges.length === 0) && (
-              <div className="text-xs md:text-sm text-yellow-500">
-                {configuredModels.length === 0 &&
-                configuredExchanges.length === 0
-                  ? t('configureModelsAndExchangesFirst', language)
-                  : configuredModels.length === 0
-                    ? t('configureModelsFirst', language)
-                    : t('configureExchangesFirst', language)}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <TradersManagementView
+        traders={traders}
+        models={configuredModels}
+        exchanges={configuredExchanges}
+        modelInUse={(id) => !!isModelInUse(id)}
+        exchangeInUse={(id) => !!isExchangeInUse(id)}
+        onModel={handleModelClick}
+        onExchange={handleExchangeClick}
+        onAddModel={handleAddModel}
+        onAddExchange={handleAddExchange}
+        onLegacy={() => setShowSignalSourceModal(true)}
+        onCreate={() => setShowCreateModal(true)}
+        onView={(id) => onTraderSelect?.(id)}
+        onEdit={handleEditTrader}
+        onToggle={handleToggleTrader}
+        onDelete={handleDeleteTrader}
+        legacyWarning={
+          !!traders?.some((t) => t.use_coin_pool || t.use_oi_top) &&
+          !userSignalSource.coinPoolUrl &&
+          !userSignalSource.oiTopUrl
+        }
+      />
 
       {/* Create Trader Modal */}
       {showCreateModal && (
@@ -1226,40 +773,10 @@ function Tooltip({
   content: string
   children: React.ReactNode
 }) {
-  const [show, setShow] = useState(false)
-
   return (
-    <div className="relative inline-block">
-      <div
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onClick={() => setShow(!show)}
-      >
-        {children}
-      </div>
-      {show && (
-        <div
-          className="absolute z-10 px-3 py-2 text-sm rounded-lg shadow-lg w-64 left-1/2 transform -translate-x-1/2 bottom-full mb-2"
-          style={{
-            background: '#2B3139',
-            color: '#EAECEF',
-            border: '1px solid #474D57',
-          }}
-        >
-          {content}
-          <div
-            className="absolute left-1/2 transform -translate-x-1/2 top-full"
-            style={{
-              width: 0,
-              height: 0,
-              borderLeft: '6px solid transparent',
-              borderRight: '6px solid transparent',
-              borderTop: '6px solid #2B3139',
-            }}
-          />
-        </div>
-      )}
-    </div>
+    <AntTooltip title={content}>
+      <span className="inline-flex">{children}</span>
+    </AntTooltip>
   )
 }
 
@@ -1286,36 +803,39 @@ function SignalSourceModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div
-        className="bg-gray-800 rounded-lg p-6 w-full max-w-lg relative"
-        style={{ background: '#1E2329' }}
-      >
-        <h3 className="text-xl font-bold mb-4" style={{ color: '#EAECEF' }}>
-          📡 {t('signalSourceConfig', language)}
+    <UiDialog onClose={onClose} width={600}>
+      <div>
+        <h3
+          className="text-xl font-bold mb-4"
+          style={{ color: 'var(--foreground)' }}
+        >
+          {uiText('📡 旧版自定义信号接口（兼容）', language)}{' '}
         </h3>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <UiForm onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
               className="block text-sm font-semibold mb-2"
-              style={{ color: '#EAECEF' }}
+              style={{ color: 'var(--foreground)' }}
             >
               COIN POOL URL
             </label>
-            <input
+            <UiInput
               type="url"
               value={coinPool}
               onChange={(e) => setCoinPool(e.target.value)}
-              placeholder="https://api.example.com/coinpool"
+              placeholder={uiText('输入币种池数据接口地址', language)}
               className="w-full px-3 py-2 rounded"
               style={{
-                background: '#0B0E11',
-                border: '1px solid #2B3139',
-                color: '#EAECEF',
+                background: 'var(--background)',
+                border: '1px solid var(--panel-border)',
+                color: 'var(--foreground)',
               }}
             />
-            <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
+            <div
+              className="text-xs mt-1"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               {t('coinPoolDescription', language)}
             </div>
           </div>
@@ -1323,23 +843,26 @@ function SignalSourceModal({
           <div>
             <label
               className="block text-sm font-semibold mb-2"
-              style={{ color: '#EAECEF' }}
+              style={{ color: 'var(--foreground)' }}
             >
               OI TOP URL
             </label>
-            <input
+            <UiInput
               type="url"
               value={oiTop}
               onChange={(e) => setOiTop(e.target.value)}
-              placeholder="https://api.example.com/oitop"
+              placeholder={uiText('输入持仓量排行数据接口地址', language)}
               className="w-full px-3 py-2 rounded"
               style={{
-                background: '#0B0E11',
-                border: '1px solid #2B3139',
-                color: '#EAECEF',
+                background: 'var(--background)',
+                border: '1px solid var(--panel-border)',
+                color: 'var(--foreground)',
               }}
             />
-            <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
+            <div
+              className="text-xs mt-1"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               {t('oiTopDescription', language)}
             </div>
           </div>
@@ -1347,17 +870,20 @@ function SignalSourceModal({
           <div
             className="p-4 rounded"
             style={{
-              background: 'rgba(240, 185, 11, 0.1)',
-              border: '1px solid rgba(240, 185, 11, 0.2)',
+              background: 'rgba(52, 211, 153, 0.1)',
+              border: '1px solid rgba(52, 211, 153, 0.2)',
             }}
           >
             <div
               className="text-sm font-semibold mb-2"
-              style={{ color: '#F0B90B' }}
+              style={{ color: 'var(--binance-yellow)' }}
             >
               ℹ️ {t('information', language)}
             </div>
-            <div className="text-xs space-y-1" style={{ color: '#848E9C' }}>
+            <div
+              className="text-xs space-y-1"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               <div>{t('signalSourceInfo1', language)}</div>
               <div>{t('signalSourceInfo2', language)}</div>
               <div>{t('signalSourceInfo3', language)}</div>
@@ -1365,25 +891,28 @@ function SignalSourceModal({
           </div>
 
           <div className="flex gap-3 mt-6">
-            <button
+            <UiButton
               type="button"
               onClick={onClose}
               className="flex-1 px-4 py-2 rounded text-sm font-semibold"
-              style={{ background: '#2B3139', color: '#848E9C' }}
+              style={{
+                background: 'var(--panel-border)',
+                color: 'var(--text-secondary)',
+              }}
             >
               {t('cancel', language)}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               type="submit"
               className="flex-1 px-4 py-2 rounded text-sm font-semibold"
-              style={{ background: '#F0B90B', color: '#000' }}
+              style={{ background: 'var(--binance-yellow)', color: '#000' }}
             >
               {t('save', language)}
-            </button>
+            </UiButton>
           </div>
-        </form>
+        </UiForm>
       </div>
-    </div>
+    </UiDialog>
   )
 }
 
@@ -1420,6 +949,21 @@ function ModelConfigModal({
     ? configuredModels?.find((m) => m.id === selectedModelId)
     : allModels?.find((m) => m.id === selectedModelId)
 
+  const requiresCustom =
+    !!selectedModel && !['deepseek', 'qwen'].includes(selectedModel.provider)
+  useEffect(() => {
+    if (editingModelId) return
+    const urls: Record<string, string> = {
+      gemini: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      kimi: 'https://api.moonshot.ai/v1',
+      siliconflow: 'https://api.siliconflow.cn/v1',
+      openrouter: 'https://openrouter.ai/api/v1',
+    }
+    setBaseUrl(urls[selectedModel?.provider || ''] || '')
+    setModelName('')
+    setApiKey('')
+  }, [selectedModelId, editingModelId])
+
   // 如果是编辑现有模型，初始化API Key、Base URL和Model Name
   useEffect(() => {
     if (editingModelId && selectedModel) {
@@ -1431,7 +975,12 @@ function ModelConfigModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedModelId || !apiKey.trim()) return
+    if (
+      !selectedModelId ||
+      !apiKey.trim() ||
+      (requiresCustom && (!baseUrl.trim() || !modelName.trim()))
+    )
+      return
 
     onSave(
       selectedModelId,
@@ -1445,47 +994,50 @@ function ModelConfigModal({
   const availableModels = allModels || []
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div
-        className="bg-gray-800 rounded-lg p-6 w-full max-w-lg relative"
-        style={{ background: '#1E2329' }}
-      >
+    <UiDialog onClose={onClose} width={600}>
+      <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold" style={{ color: '#EAECEF' }}>
+          <h3
+            className="text-xl font-bold"
+            style={{ color: 'var(--foreground)' }}
+          >
             {editingModelId
               ? t('editAIModel', language)
               : t('addAIModel', language)}
           </h3>
           {editingModelId && (
-            <button
+            <UiButton
               type="button"
               onClick={() => onDelete(editingModelId)}
               className="p-2 rounded hover:bg-red-100 transition-colors"
-              style={{ background: 'rgba(246, 70, 93, 0.1)', color: '#F6465D' }}
+              style={{
+                background: 'rgba(246, 70, 93, 0.1)',
+                color: 'var(--binance-red)',
+              }}
               title={t('delete', language)}
             >
               <Trash2 className="w-4 h-4" />
-            </button>
+            </UiButton>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <UiForm onSubmit={handleSubmit} className="space-y-4">
           {!editingModelId && (
             <div>
               <label
                 className="block text-sm font-semibold mb-2"
-                style={{ color: '#EAECEF' }}
+                style={{ color: 'var(--foreground)' }}
               >
                 {t('selectModel', language)}
               </label>
-              <select
+              <UiSelect
                 value={selectedModelId}
                 onChange={(e) => setSelectedModelId(e.target.value)}
                 className="w-full px-3 py-2 rounded"
                 style={{
-                  background: '#0B0E11',
-                  border: '1px solid #2B3139',
-                  color: '#EAECEF',
+                  background: 'var(--background)',
+                  border: '1px solid var(--panel-border)',
+                  color: 'var(--foreground)',
                 }}
                 required
               >
@@ -1495,14 +1047,17 @@ function ModelConfigModal({
                     {getShortName(model.name)} ({model.provider})
                   </option>
                 ))}
-              </select>
+              </UiSelect>
             </div>
           )}
 
           {selectedModel && (
             <div
               className="p-4 rounded"
-              style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
+              style={{
+                background: 'var(--background)',
+                border: '1px solid var(--panel-border)',
+              }}
             >
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-8 h-8 flex items-center justify-center">
@@ -1525,10 +1080,16 @@ function ModelConfigModal({
                   )}
                 </div>
                 <div>
-                  <div className="font-semibold" style={{ color: '#EAECEF' }}>
+                  <div
+                    className="font-semibold"
+                    style={{ color: 'var(--foreground)' }}
+                  >
                     {getShortName(selectedModel.name)}
                   </div>
-                  <div className="text-xs" style={{ color: '#848E9C' }}>
+                  <div
+                    className="text-xs"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
                     {selectedModel.provider} • {selectedModel.id}
                   </div>
                 </div>
@@ -1541,20 +1102,20 @@ function ModelConfigModal({
               <div>
                 <label
                   className="block text-sm font-semibold mb-2"
-                  style={{ color: '#EAECEF' }}
+                  style={{ color: 'var(--foreground)' }}
                 >
                   API Key
                 </label>
-                <input
+                <UiInput
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder={t('enterAPIKey', language)}
                   className="w-full px-3 py-2 rounded"
                   style={{
-                    background: '#0B0E11',
-                    border: '1px solid #2B3139',
-                    color: '#EAECEF',
+                    background: 'var(--background)',
+                    border: '1px solid var(--panel-border)',
+                    color: 'var(--foreground)',
                   }}
                   required
                 />
@@ -1563,65 +1124,93 @@ function ModelConfigModal({
               <div>
                 <label
                   className="block text-sm font-semibold mb-2"
-                  style={{ color: '#EAECEF' }}
+                  style={{ color: 'var(--foreground)' }}
                 >
-                  {t('customBaseURL', language)}
+                  {requiresCustom
+                    ? uiText('API 地址（必填）', language)
+                    : t('customBaseURL', language)}
                 </label>
-                <input
+                <UiInput
                   type="url"
                   value={baseUrl}
+                  required={requiresCustom}
                   onChange={(e) => setBaseUrl(e.target.value)}
                   placeholder={t('customBaseURLPlaceholder', language)}
                   className="w-full px-3 py-2 rounded"
                   style={{
-                    background: '#0B0E11',
-                    border: '1px solid #2B3139',
-                    color: '#EAECEF',
+                    background: 'var(--background)',
+                    border: '1px solid var(--panel-border)',
+                    color: 'var(--foreground)',
                   }}
                 />
-                <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
-                  {t('leaveBlankForDefault', language)}
+                <div
+                  className="text-xs mt-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {requiresCustom
+                    ? uiText(
+                        '使用兼容 Chat Completions 的接口，默认追加 /chat/completions；地区地址可自行修改。',
+                        language
+                      )
+                    : t('leaveBlankForDefault', language)}
                 </div>
               </div>
 
               <div>
                 <label
                   className="block text-sm font-semibold mb-2"
-                  style={{ color: '#EAECEF' }}
+                  style={{ color: 'var(--foreground)' }}
                 >
-                  Model Name (可选)
+                  {requiresCustom
+                    ? uiText('模型 ID（必填）', language)
+                    : uiText('模型 ID（可选）', language)}
                 </label>
-                <input
+                <UiInput
                   type="text"
                   value={modelName}
+                  required={requiresCustom}
                   onChange={(e) => setModelName(e.target.value)}
-                  placeholder="例如: deepseek-chat, qwen3-max, gpt-5"
+                  placeholder={uiText(
+                    '例如: deepseek-chat, qwen3-max, gpt-5',
+                    language
+                  )}
                   className="w-full px-3 py-2 rounded"
                   style={{
-                    background: '#0B0E11',
-                    border: '1px solid #2B3139',
-                    color: '#EAECEF',
+                    background: 'var(--background)',
+                    border: '1px solid var(--panel-border)',
+                    color: 'var(--foreground)',
                   }}
                 />
-                <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
-                  留空使用默认模型名称
+                <div
+                  className="text-xs mt-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {requiresCustom
+                    ? uiText(
+                        '填写服务商提供的完整模型 ID；OpenRouter 通常为 服务商/模型名。仅支持文本对话模型。',
+                        language
+                      )
+                    : uiText('留空使用默认模型名称', language)}
                 </div>
               </div>
 
               <div
                 className="p-4 rounded"
                 style={{
-                  background: 'rgba(240, 185, 11, 0.1)',
-                  border: '1px solid rgba(240, 185, 11, 0.2)',
+                  background: 'rgba(52, 211, 153, 0.1)',
+                  border: '1px solid rgba(52, 211, 153, 0.2)',
                 }}
               >
                 <div
                   className="text-sm font-semibold mb-2"
-                  style={{ color: '#F0B90B' }}
+                  style={{ color: 'var(--binance-yellow)' }}
                 >
                   ℹ️ {t('information', language)}
                 </div>
-                <div className="text-xs space-y-1" style={{ color: '#848E9C' }}>
+                <div
+                  className="text-xs space-y-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
                   <div>{t('modelConfigInfo1', language)}</div>
                   <div>{t('modelConfigInfo2', language)}</div>
                   <div>{t('modelConfigInfo3', language)}</div>
@@ -1631,31 +1220,38 @@ function ModelConfigModal({
           )}
 
           <div className="flex gap-3 mt-6">
-            <button
+            <UiButton
               type="button"
               onClick={onClose}
               className="flex-1 px-4 py-2 rounded text-sm font-semibold"
-              style={{ background: '#2B3139', color: '#848E9C' }}
+              style={{
+                background: 'var(--panel-border)',
+                color: 'var(--text-secondary)',
+              }}
             >
               {t('cancel', language)}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               type="submit"
-              disabled={!selectedModel || !apiKey.trim()}
+              disabled={
+                !selectedModel ||
+                !apiKey.trim() ||
+                (requiresCustom && (!baseUrl.trim() || !modelName.trim()))
+              }
               className="flex-1 px-4 py-2 rounded text-sm font-semibold disabled:opacity-50"
-              style={{ background: '#F0B90B', color: '#000' }}
+              style={{ background: 'var(--binance-yellow)', color: '#000' }}
             >
               {t('saveConfig', language)}
-            </button>
+            </UiButton>
           </div>
-        </form>
+        </UiForm>
       </div>
-    </div>
+    </UiDialog>
   )
 }
 
 // Exchange Configuration Modal Component
-function ExchangeConfigModal({
+export function ExchangeConfigModal({
   allExchanges,
   editingExchangeId,
   onSave,
@@ -1682,6 +1278,8 @@ function ExchangeConfigModal({
   const [selectedExchangeId, setSelectedExchangeId] = useState(
     editingExchangeId || ''
   )
+  const [credentialsLoading, setCredentialsLoading] = useState(!!editingExchangeId)
+  const [credentialsError, setCredentialsError] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [secretKey, setSecretKey] = useState('')
   const [passphrase, setPassphrase] = useState('')
@@ -1693,9 +1291,6 @@ function ExchangeConfigModal({
   } | null>(null)
   const [loadingIP, setLoadingIP] = useState(false)
   const [copiedIP, setCopiedIP] = useState(false)
-
-  // 币安配置指南展开状态
-  const [showBinanceGuide, setShowBinanceGuide] = useState(false)
 
   // Aster 特定字段
   const [asterUser, setAsterUser] = useState('')
@@ -1715,23 +1310,27 @@ function ExchangeConfigModal({
     (e) => e.id === selectedExchangeId
   )
 
-  // 如果是编辑现有交易所，初始化表单数据
+  // Fetch the owner's saved credentials once per edit, not the public catalog.
   useEffect(() => {
-    if (editingExchangeId && selectedExchange) {
-      setApiKey(selectedExchange.apiKey || '')
-      setSecretKey(selectedExchange.secretKey || '')
-      setPassphrase('') // Don't load existing passphrase for security
-      setTestnet(selectedExchange.testnet || false)
-
-      // Aster 字段
-      setAsterUser(selectedExchange.asterUser || '')
-      setAsterSigner(selectedExchange.asterSigner || '')
-      setAsterPrivateKey('') // Don't load existing private key for security
-
-      // Hyperliquid 字段
-      setHyperliquidWalletAddr(selectedExchange.hyperliquidWalletAddr || '')
-    }
-  }, [editingExchangeId, selectedExchange])
+    if (!editingExchangeId) return
+    let cancelled = false
+    setCredentialsLoading(true)
+    setCredentialsError('')
+    api.getExchangeCredentials(editingExchangeId).then((saved) => {
+      if (cancelled) return
+      setApiKey(saved.apiKey || '')
+      setSecretKey(saved.secretKey || '')
+      setTestnet(saved.testnet || false)
+      setHyperliquidWalletAddr(saved.hyperliquidWalletAddr || '')
+      setAsterUser(saved.asterUser || '')
+      setAsterSigner(saved.asterSigner || '')
+    }).catch(() => {
+      if (!cancelled) setCredentialsError(language === 'zh'
+        ? '已保存的凭证加载失败，请关闭弹窗后重试；当前空白不代表原配置为空。'
+        : 'Saved credentials could not be loaded. Close this dialog and try again; empty fields do not mean the saved configuration is empty.')
+    }).finally(() => { if (!cancelled) setCredentialsLoading(false) })
+    return () => { cancelled = true }
+  }, [editingExchangeId])
 
   // 加载服务器IP（当选择binance时）
   useEffect(() => {
@@ -1798,6 +1397,7 @@ function ExchangeConfigModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (credentialsLoading || credentialsError) return
     if (!selectedExchangeId) return
 
     // 根据交易所类型验证不同字段
@@ -1836,70 +1436,70 @@ function ExchangeConfigModal({
     }
   }
 
+  const standardCredentials = !!selectedExchange &&
+    (selectedExchange.id === 'binance' || selectedExchange.type === 'cex') &&
+    selectedExchange.id !== 'hyperliquid' && selectedExchange.id !== 'aster'
+
   // 可选择的交易所列表（所有支持的交易所）
   const availableExchanges = allExchanges || []
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div
-        className="bg-gray-800 rounded-lg p-6 w-full max-w-lg relative"
-        style={{ background: '#1E2329' }}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold" style={{ color: '#EAECEF' }}>
-            {editingExchangeId
-              ? t('editExchange', language)
-              : t('addExchange', language)}
-          </h3>
+    <UiDialog onClose={onClose} width={standardCredentials ? 920 : 720} className="exchange-config-dialog" title={editingExchangeId ? t('editExchange', language) : t('addExchange', language)}>
+      <div>
+        <div className="exchange-config-toolbar">
+          <p className="exchange-config-intro">{language === 'zh' ? '管理账户连接、API 凭证与运行环境' : 'Manage your account connection, API credentials and environment'}</p>
           <div className="flex items-center gap-2">
             {selectedExchange?.id === 'binance' && (
-              <button
+              <UiButton
                 type="button"
                 onClick={() => setShowGuide(true)}
-                className="px-3 py-2 rounded text-sm font-semibold transition-all hover:scale-105 flex items-center gap-2"
+                className="px-3 py-2 rounded text-sm font-semibold transition-all  flex items-center gap-2"
                 style={{
-                  background: 'rgba(240, 185, 11, 0.1)',
-                  color: '#F0B90B',
+                  background: 'rgba(52, 211, 153, 0.1)',
+                  color: 'var(--binance-yellow)',
                 }}
               >
                 <BookOpen className="w-4 h-4" />
                 {t('viewGuide', language)}
-              </button>
+              </UiButton>
             )}
             {editingExchangeId && (
-              <button
+              <UiButton
                 type="button"
                 onClick={() => onDelete(editingExchangeId)}
                 className="p-2 rounded hover:bg-red-100 transition-colors"
                 style={{
                   background: 'rgba(246, 70, 93, 0.1)',
-                  color: '#F6465D',
+                  color: 'var(--binance-red)',
                 }}
                 title={t('delete', language)}
               >
                 <Trash2 className="w-4 h-4" />
-              </button>
+              </UiButton>
             )}
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <UiForm onSubmit={handleSubmit} className="exchange-config-form">
+          <div className="exchange-config-scroll">
+          {credentialsLoading && <AntAlert type="info" showIcon title={language === 'zh' ? '正在加载已保存的账户配置…' : 'Loading saved account configuration…'} />}
+          {credentialsError && <AntAlert type="error" showIcon title={credentialsError} />}
           {!editingExchangeId && (
             <div>
               <label
                 className="block text-sm font-semibold mb-2"
-                style={{ color: '#EAECEF' }}
+                style={{ color: 'var(--foreground)' }}
               >
                 {t('selectExchange', language)}
               </label>
-              <select
+              <UiSelect
                 value={selectedExchangeId}
                 onChange={(e) => setSelectedExchangeId(e.target.value)}
                 className="w-full px-3 py-2 rounded"
                 style={{
-                  background: '#0B0E11',
-                  border: '1px solid #2B3139',
-                  color: '#EAECEF',
+                  background: 'var(--background)',
+                  border: '1px solid var(--panel-border)',
+                  color: 'var(--foreground)',
                 }}
                 required
               >
@@ -1910,14 +1510,13 @@ function ExchangeConfigModal({
                     )
                   </option>
                 ))}
-              </select>
+              </UiSelect>
             </div>
           )}
 
           {selectedExchange && (
             <div
-              className="p-4 rounded"
-              style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
+              className="exchange-config-account"
             >
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-8 h-8 flex items-center justify-center">
@@ -1927,10 +1526,16 @@ function ExchangeConfigModal({
                   })}
                 </div>
                 <div>
-                  <div className="font-semibold" style={{ color: '#EAECEF' }}>
+                  <div
+                    className="font-semibold"
+                    style={{ color: 'var(--foreground)' }}
+                  >
                     {getShortName(selectedExchange.name)}
                   </div>
-                  <div className="text-xs" style={{ color: '#848E9C' }}>
+                  <div
+                    className="text-xs"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
                     {selectedExchange.type.toUpperCase()} •{' '}
                     {selectedExchange.id}
                   </div>
@@ -1942,232 +1547,78 @@ function ExchangeConfigModal({
           {selectedExchange && (
             <>
               {/* Binance 和其他 CEX 交易所的字段 */}
-              {(selectedExchange.id === 'binance' ||
-                selectedExchange.type === 'cex') &&
-                selectedExchange.id !== 'hyperliquid' &&
-                selectedExchange.id !== 'aster' && (
-                  <>
-                    {/* 币安用户配置提示 (D1 方案) */}
-                    {selectedExchange.id === 'binance' && (
-                      <div
-                        className="mb-4 p-3 rounded cursor-pointer transition-colors"
-                        style={{
-                          background: '#1a3a52',
-                          border: '1px solid #2b5278',
-                        }}
-                        onClick={() => setShowBinanceGuide(!showBinanceGuide)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span style={{ color: '#58a6ff' }}>ℹ️</span>
-                            <span
-                              className="text-sm font-medium"
-                              style={{ color: '#EAECEF' }}
-                            >
-                              <strong>币安用户必读：</strong>
-                              使用「现货与合约交易」API，不要用「统一账户 API」
-                            </span>
-                          </div>
-                          <span style={{ color: '#8b949e' }}>
-                            {showBinanceGuide ? '▲' : '▼'}
-                          </span>
-                        </div>
-
-                        {/* 展开的详细说明 */}
-                        {showBinanceGuide && (
-                          <div
-                            className="mt-3 pt-3"
-                            style={{
-                              borderTop: '1px solid #2b5278',
-                              fontSize: '0.875rem',
-                              color: '#c9d1d9',
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <p className="mb-2" style={{ color: '#8b949e' }}>
-                              <strong>原因：</strong>统一账户 API
-                              权限结构不同，会导致订单提交失败
-                            </p>
-
-                            <p
-                              className="font-semibold mb-1"
-                              style={{ color: '#EAECEF' }}
-                            >
-                              正确配置步骤：
-                            </p>
-                            <ol
-                              className="list-decimal list-inside space-y-1 mb-3"
-                              style={{ paddingLeft: '0.5rem' }}
-                            >
-                              <li>
-                                登录币安 → 个人中心 → <strong>API 管理</strong>
-                              </li>
-                              <li>
-                                创建 API → 选择「
-                                <strong>系统生成的 API 密钥</strong>」
-                              </li>
-                              <li>
-                                勾选「<strong>现货与合约交易</strong>」（
-                                <span style={{ color: '#f85149' }}>
-                                  不选统一账户
-                                </span>
-                                ）
-                              </li>
-                              <li>
-                                IP 限制选「<strong>无限制</strong>」或添加服务器
-                                IP
-                              </li>
-                            </ol>
-
-                            <p
-                              className="mb-2 p-2 rounded"
-                              style={{
-                                background: '#3d2a00',
-                                border: '1px solid #9e6a03',
-                              }}
-                            >
-                              💡 <strong>多资产模式用户注意：</strong>
-                              如果您开启了多资产模式，将强制使用全仓模式。建议关闭多资产模式以支持逐仓交易。
-                            </p>
-
-                            <a
-                              href="https://www.binance.com/zh-CN/support/faq/how-to-create-api-keys-on-binance-360002502072"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-block text-sm hover:underline"
-                              style={{ color: '#58a6ff' }}
-                            >
-                              📖 查看币安官方教程 ↗
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div>
-                      <label
-                        className="block text-sm font-semibold mb-2"
-                        style={{ color: '#EAECEF' }}
-                      >
-                        {t('apiKey', language)}
-                      </label>
-                      <input
-                        type="password"
-                        value={apiKey}
+              {standardCredentials && (
+                <div className="exchange-config-grid">
+                  <section className="exchange-config-credentials" aria-label={language === 'zh' ? 'API 访问凭证' : 'API credentials'}>
+                    <div className="exchange-config-section-heading">
+                      <h4>{language === 'zh' ? '访问凭证' : 'API credentials'}</h4>
+                      <span>{language === 'zh' ? '明文显示' : 'Visible'}</span>
+                    </div>
+                    <div className="exchange-config-field">
+                      <label htmlFor="exchange-api-key">API Key</label>
+                      <UiInput id="exchange-api-key" disabled={credentialsLoading || !!credentialsError} type="text" value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
-                        placeholder={t('enterAPIKey', language)}
-                        className="w-full px-3 py-2 rounded"
-                        style={{
-                          background: '#0B0E11',
-                          border: '1px solid #2B3139',
-                          color: '#EAECEF',
-                        }}
-                        required
-                      />
+                        placeholder={t('enterAPIKey', language)} autoComplete="off" autoCapitalize="none" spellCheck={false} required />
                     </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-semibold mb-2"
-                        style={{ color: '#EAECEF' }}
-                      >
-                        {t('secretKey', language)}
-                      </label>
-                      <input
-                        type="password"
-                        value={secretKey}
+                    <div className="exchange-config-field">
+                      <label htmlFor="exchange-secret-key">Secret Key</label>
+                      <UiInput id="exchange-secret-key" disabled={credentialsLoading || !!credentialsError} type="text" value={secretKey}
                         onChange={(e) => setSecretKey(e.target.value)}
-                        placeholder={t('enterSecretKey', language)}
-                        className="w-full px-3 py-2 rounded"
-                        style={{
-                          background: '#0B0E11',
-                          border: '1px solid #2B3139',
-                          color: '#EAECEF',
-                        }}
-                        required
-                      />
+                        placeholder={t('enterSecretKey', language)} autoComplete="off" autoCapitalize="none" spellCheck={false} required />
                     </div>
+                    {selectedExchange.id === 'okx' && <div className="exchange-config-field">
+                      <label htmlFor="exchange-passphrase">{t('passphrase', language)}</label>
+                      <UiInput id="exchange-passphrase" disabled={credentialsLoading || !!credentialsError} type="text" value={passphrase}
+                        onChange={(e) => setPassphrase(e.target.value)}
+                        placeholder={t('enterPassphrase', language)} autoComplete="off" spellCheck={false} required />
+                    </div>}
+                    <div className="exchange-config-mode">
+                      <h4>{language === 'zh' ? '运行环境' : 'Environment'}</h4>
+              <div className="exchange-config-environment">
+                <UiCheckLabel className="flex items-center gap-2 text-sm">
+                  <UiInput
+                    type="checkbox"
+                    checked={testnet}
+                    onChange={(e) => setTestnet(e.target.checked)}
+                    className="form-checkbox rounded"
+                    style={{ accentColor: 'var(--binance-yellow)' }}
+                  />
+                  <span style={{ color: 'var(--foreground)' }}>
+                    {t('useTestnet', language)}
+                  </span>
+                </UiCheckLabel>
+                <div
+                  className="text-xs mt-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {t('testnetDescription', language)}
+                </div>
+              </div>
 
-                    {selectedExchange.id === 'okx' && (
-                      <div>
-                        <label
-                          className="block text-sm font-semibold mb-2"
-                          style={{ color: '#EAECEF' }}
-                        >
-                          {t('passphrase', language)}
-                        </label>
-                        <input
-                          type="password"
-                          value={passphrase}
-                          onChange={(e) => setPassphrase(e.target.value)}
-                          placeholder={t('enterPassphrase', language)}
-                          className="w-full px-3 py-2 rounded"
-                          style={{
-                            background: '#0B0E11',
-                            border: '1px solid #2B3139',
-                            color: '#EAECEF',
-                          }}
-                          required
-                        />
-                      </div>
-                    )}
-
-                    {/* Binance 白名单IP提示 */}
-                    {selectedExchange.id === 'binance' && (
-                      <div
-                        className="p-4 rounded"
-                        style={{
-                          background: 'rgba(240, 185, 11, 0.1)',
-                          border: '1px solid rgba(240, 185, 11, 0.2)',
-                        }}
-                      >
-                        <div
-                          className="text-sm font-semibold mb-2"
-                          style={{ color: '#F0B90B' }}
-                        >
-                          {t('whitelistIP', language)}
-                        </div>
-                        <div
-                          className="text-xs mb-3"
-                          style={{ color: '#848E9C' }}
-                        >
-                          {t('whitelistIPDesc', language)}
-                        </div>
-
-                        {loadingIP ? (
-                          <div className="text-xs" style={{ color: '#848E9C' }}>
-                            {t('loadingServerIP', language)}
-                          </div>
-                        ) : serverIP && serverIP.public_ip ? (
-                          <div
-                            className="flex items-center gap-2 p-2 rounded"
-                            style={{ background: '#0B0E11' }}
-                          >
-                            <code
-                              className="flex-1 text-sm font-mono"
-                              style={{ color: '#F0B90B' }}
-                            >
-                              {serverIP.public_ip}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyIP(serverIP.public_ip)}
-                              className="px-3 py-1 rounded text-xs font-semibold transition-all hover:scale-105"
-                              style={{
-                                background: 'rgba(240, 185, 11, 0.2)',
-                                color: '#F0B90B',
-                              }}
-                            >
-                              {copiedIP
-                                ? t('ipCopied', language)
-                                : t('copyIP', language)}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-                  </>
-                )}
+                    </div>
+                  </section>
+                  <aside className="exchange-config-sidebar" aria-label={language === 'zh' ? '连接说明' : 'Connection details'}>
+                    {selectedExchange.id === 'binance' && <div className="exchange-config-whitelist">
+                      <h4>{t('whitelistIP', language)}</h4>
+                      <p>{language === 'zh' ? '将此出口 IP 添加到币安 API 白名单。' : 'Add this outbound IP to your Binance API allowlist.'}</p>
+                      {loadingIP ? <span>{t('loadingServerIP', language)}</span> : serverIP?.public_ip ? <div className="exchange-config-ip-row">
+                        <code>{serverIP.public_ip}</code>
+                        <UiButton type="button" onClick={() => handleCopyIP(serverIP.public_ip)}>
+                          {copiedIP ? t('ipCopied', language) : t('copyIP', language)}
+                        </UiButton>
+                      </div> : <span>{language === 'zh' ? '暂未获取到出口 IP，可稍后查看' : 'Outbound IP unavailable. Try again later.'}</span>}
+                    </div>}
+                    <div className="exchange-config-permissions">
+                      <h4>{language === 'zh' ? '权限说明' : 'API permissions'}</h4>
+                      <ul>
+                        <li>{t('exchangeConfigWarning1', language).replace(/^[•·]\s*/, '')}</li>
+                        <li>{t('exchangeConfigWarning2', language).replace(/^[•·]\s*/, '')}</li>
+                        <li>{t('exchangeConfigWarning3', language).replace(/^[•·]\s*/, '')}</li>
+                      </ul>
+                    </div>
+                  </aside>
+                </div>
+              )}
 
               {/* Hyperliquid 交易所的字段 */}
               {selectedExchange.id === 'hyperliquid' && (
@@ -2176,24 +1627,32 @@ function ExchangeConfigModal({
                   <div
                     className="p-3 rounded mb-4"
                     style={{
-                      background: 'rgba(240, 185, 11, 0.1)',
-                      border: '1px solid rgba(240, 185, 11, 0.3)',
+                      background: 'rgba(52, 211, 153, 0.1)',
+                      border: '1px solid rgba(52, 211, 153, 0.3)',
                     }}
                   >
                     <div className="flex items-start gap-2">
-                      <span style={{ color: '#F0B90B', fontSize: '16px' }}>
+                      <span
+                        style={{
+                          color: 'var(--binance-yellow)',
+                          fontSize: '16px',
+                        }}
+                      >
                         🔐
                       </span>
                       <div className="flex-1">
                         <div
                           className="text-sm font-semibold mb-1"
-                          style={{ color: '#F0B90B' }}
+                          style={{ color: 'var(--binance-yellow)' }}
                         >
                           {t('hyperliquidAgentWalletTitle', language)}
                         </div>
                         <div
                           className="text-xs"
-                          style={{ color: '#848E9C', lineHeight: '1.5' }}
+                          style={{
+                            color: 'var(--text-secondary)',
+                            lineHeight: '1.5',
+                          }}
                         >
                           {t('hyperliquidAgentWalletDesc', language)}
                         </div>
@@ -2205,13 +1664,13 @@ function ExchangeConfigModal({
                   <div>
                     <label
                       className="block text-sm font-semibold mb-2"
-                      style={{ color: '#EAECEF' }}
+                      style={{ color: 'var(--foreground)' }}
                     >
                       {t('hyperliquidAgentPrivateKey', language)}
                     </label>
                     <div className="flex flex-col gap-2">
                       <div className="flex gap-2">
-                        <input
+                        <UiInput
                           type="text"
                           value={maskSecret(apiKey)}
                           readOnly
@@ -2221,17 +1680,17 @@ function ExchangeConfigModal({
                           )}
                           className="w-full px-3 py-2 rounded"
                           style={{
-                            background: '#0B0E11',
-                            border: '1px solid #2B3139',
-                            color: '#EAECEF',
+                            background: 'var(--background)',
+                            border: '1px solid var(--panel-border)',
+                            color: 'var(--foreground)',
                           }}
                         />
-                        <button
+                        <UiButton
                           type="button"
                           onClick={() => setSecureInputTarget('hyperliquid')}
-                          className="px-3 py-2 rounded text-xs font-semibold transition-all hover:scale-105"
+                          className="px-3 py-2 rounded text-xs font-semibold transition-all "
                           style={{
-                            background: '#F0B90B',
+                            background: 'var(--binance-yellow)',
                             color: '#000',
                             whiteSpace: 'nowrap',
                           }}
@@ -2239,29 +1698,35 @@ function ExchangeConfigModal({
                           {apiKey
                             ? t('secureInputReenter', language)
                             : t('secureInputButton', language)}
-                        </button>
+                        </UiButton>
                         {apiKey && (
-                          <button
+                          <UiButton
                             type="button"
                             onClick={() => setApiKey('')}
-                            className="px-3 py-2 rounded text-xs font-semibold transition-all hover:scale-105"
+                            className="px-3 py-2 rounded text-xs font-semibold transition-all "
                             style={{
                               background: '#1B1F2B',
-                              color: '#848E9C',
+                              color: 'var(--text-secondary)',
                               whiteSpace: 'nowrap',
                             }}
                           >
                             {t('secureInputClear', language)}
-                          </button>
+                          </UiButton>
                         )}
                       </div>
                       {apiKey && (
-                        <div className="text-xs" style={{ color: '#848E9C' }}>
+                        <div
+                          className="text-xs"
+                          style={{ color: 'var(--text-secondary)' }}
+                        >
                           {t('secureInputHint', language)}
                         </div>
                       )}
                     </div>
-                    <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
+                    <div
+                      className="text-xs mt-1"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
                       {t('hyperliquidAgentPrivateKeyDesc', language)}
                     </div>
                   </div>
@@ -2270,11 +1735,11 @@ function ExchangeConfigModal({
                   <div>
                     <label
                       className="block text-sm font-semibold mb-2"
-                      style={{ color: '#EAECEF' }}
+                      style={{ color: 'var(--foreground)' }}
                     >
                       {t('hyperliquidMainWalletAddress', language)}
                     </label>
-                    <input
+                    <UiInput
                       type="text"
                       value={hyperliquidWalletAddr}
                       onChange={(e) => setHyperliquidWalletAddr(e.target.value)}
@@ -2284,13 +1749,16 @@ function ExchangeConfigModal({
                       )}
                       className="w-full px-3 py-2 rounded"
                       style={{
-                        background: '#0B0E11',
-                        border: '1px solid #2B3139',
-                        color: '#EAECEF',
+                        background: 'var(--background)',
+                        border: '1px solid var(--panel-border)',
+                        color: 'var(--foreground)',
                       }}
                       required
                     />
-                    <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
+                    <div
+                      className="text-xs mt-1"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
                       {t('hyperliquidMainWalletAddressDesc', language)}
                     </div>
                   </div>
@@ -2303,26 +1771,26 @@ function ExchangeConfigModal({
                   <div>
                     <label
                       className="block text-sm font-semibold mb-2 flex items-center gap-2"
-                      style={{ color: '#EAECEF' }}
+                      style={{ color: 'var(--foreground)' }}
                     >
                       {t('user', language)}
                       <Tooltip content={t('asterUserDesc', language)}>
                         <HelpCircle
                           className="w-4 h-4 cursor-help"
-                          style={{ color: '#F0B90B' }}
+                          style={{ color: 'var(--binance-yellow)' }}
                         />
                       </Tooltip>
                     </label>
-                    <input
+                    <UiInput
                       type="text"
                       value={asterUser}
                       onChange={(e) => setAsterUser(e.target.value)}
                       placeholder={t('enterUser', language)}
                       className="w-full px-3 py-2 rounded"
                       style={{
-                        background: '#0B0E11',
-                        border: '1px solid #2B3139',
-                        color: '#EAECEF',
+                        background: 'var(--background)',
+                        border: '1px solid var(--panel-border)',
+                        color: 'var(--foreground)',
                       }}
                       required
                     />
@@ -2331,26 +1799,26 @@ function ExchangeConfigModal({
                   <div>
                     <label
                       className="block text-sm font-semibold mb-2 flex items-center gap-2"
-                      style={{ color: '#EAECEF' }}
+                      style={{ color: 'var(--foreground)' }}
                     >
                       {t('signer', language)}
                       <Tooltip content={t('asterSignerDesc', language)}>
                         <HelpCircle
                           className="w-4 h-4 cursor-help"
-                          style={{ color: '#F0B90B' }}
+                          style={{ color: 'var(--binance-yellow)' }}
                         />
                       </Tooltip>
                     </label>
-                    <input
+                    <UiInput
                       type="text"
                       value={asterSigner}
                       onChange={(e) => setAsterSigner(e.target.value)}
                       placeholder={t('enterSigner', language)}
                       className="w-full px-3 py-2 rounded"
                       style={{
-                        background: '#0B0E11',
-                        border: '1px solid #2B3139',
-                        color: '#EAECEF',
+                        background: 'var(--background)',
+                        border: '1px solid var(--panel-border)',
+                        color: 'var(--foreground)',
                       }}
                       required
                     />
@@ -2359,36 +1827,36 @@ function ExchangeConfigModal({
                   <div>
                     <label
                       className="block text-sm font-semibold mb-2 flex items-center gap-2"
-                      style={{ color: '#EAECEF' }}
+                      style={{ color: 'var(--foreground)' }}
                     >
                       {t('privateKey', language)}
                       <Tooltip content={t('asterPrivateKeyDesc', language)}>
                         <HelpCircle
                           className="w-4 h-4 cursor-help"
-                          style={{ color: '#F0B90B' }}
+                          style={{ color: 'var(--binance-yellow)' }}
                         />
                       </Tooltip>
                     </label>
                     <div className="flex flex-col gap-2">
                       <div className="flex gap-2">
-                        <input
+                        <UiInput
                           type="text"
                           value={maskSecret(asterPrivateKey)}
                           readOnly
                           placeholder={t('enterPrivateKey', language)}
                           className="w-full px-3 py-2 rounded"
                           style={{
-                            background: '#0B0E11',
-                            border: '1px solid #2B3139',
-                            color: '#EAECEF',
+                            background: 'var(--background)',
+                            border: '1px solid var(--panel-border)',
+                            color: 'var(--foreground)',
                           }}
                         />
-                        <button
+                        <UiButton
                           type="button"
                           onClick={() => setSecureInputTarget('aster')}
-                          className="px-3 py-2 rounded text-xs font-semibold transition-all hover:scale-105"
+                          className="px-3 py-2 rounded text-xs font-semibold transition-all "
                           style={{
-                            background: '#F0B90B',
+                            background: 'var(--binance-yellow)',
                             color: '#000',
                             whiteSpace: 'nowrap',
                           }}
@@ -2396,24 +1864,27 @@ function ExchangeConfigModal({
                           {asterPrivateKey
                             ? t('secureInputReenter', language)
                             : t('secureInputButton', language)}
-                        </button>
+                        </UiButton>
                         {asterPrivateKey && (
-                          <button
+                          <UiButton
                             type="button"
                             onClick={() => setAsterPrivateKey('')}
-                            className="px-3 py-2 rounded text-xs font-semibold transition-all hover:scale-105"
+                            className="px-3 py-2 rounded text-xs font-semibold transition-all "
                             style={{
                               background: '#1B1F2B',
-                              color: '#848E9C',
+                              color: 'var(--text-secondary)',
                               whiteSpace: 'nowrap',
                             }}
                           >
                             {t('secureInputClear', language)}
-                          </button>
+                          </UiButton>
                         )}
                       </div>
                       {asterPrivateKey && (
-                        <div className="text-xs" style={{ color: '#848E9C' }}>
+                        <div
+                          className="text-xs"
+                          style={{ color: 'var(--text-secondary)' }}
+                        >
                           {t('secureInputHint', language)}
                         </div>
                       )}
@@ -2422,41 +1893,48 @@ function ExchangeConfigModal({
                 </>
               )}
 
-              <div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
+              {!standardCredentials && <>
+              <div className="exchange-config-environment">
+                <UiCheckLabel className="flex items-center gap-2 text-sm">
+                  <UiInput
                     type="checkbox"
                     checked={testnet}
                     onChange={(e) => setTestnet(e.target.checked)}
                     className="form-checkbox rounded"
-                    style={{ accentColor: '#F0B90B' }}
+                    style={{ accentColor: 'var(--binance-yellow)' }}
                   />
-                  <span style={{ color: '#EAECEF' }}>
+                  <span style={{ color: 'var(--foreground)' }}>
                     {t('useTestnet', language)}
                   </span>
-                </label>
-                <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
+                </UiCheckLabel>
+                <div
+                  className="text-xs mt-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
                   {t('testnetDescription', language)}
                 </div>
               </div>
 
               <div
-                className="p-4 rounded"
+                className="exchange-config-permissions"
                 style={{
-                  background: 'rgba(240, 185, 11, 0.1)',
-                  border: '1px solid rgba(240, 185, 11, 0.2)',
+                  background: 'rgba(52, 211, 153, 0.1)',
+                  border: '1px solid rgba(52, 211, 153, 0.2)',
                 }}
               >
                 <div
                   className="text-sm font-semibold mb-2"
-                  style={{ color: '#F0B90B' }}
+                  style={{ color: 'var(--binance-yellow)' }}
                 >
                   <span className="inline-flex items-center gap-1">
                     <AlertTriangle className="w-4 h-4" />{' '}
                     {t('securityWarning', language)}
                   </span>
                 </div>
-                <div className="text-xs space-y-1" style={{ color: '#848E9C' }}>
+                <div
+                  className="text-xs space-y-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
                   {selectedExchange.id === 'aster' && (
                     <div>{t('asterUsdtWarning', language)}</div>
                   )}
@@ -2465,22 +1943,27 @@ function ExchangeConfigModal({
                   <div>{t('exchangeConfigWarning3', language)}</div>
                 </div>
               </div>
+              </>}
             </>
           )}
 
-          <div className="flex gap-3 mt-6">
-            <button
+           </div>
+          <div className="exchange-config-footer">
+            <UiButton
               type="button"
               onClick={onClose}
               className="flex-1 px-4 py-2 rounded text-sm font-semibold"
-              style={{ background: '#2B3139', color: '#848E9C' }}
+              style={{
+                background: 'var(--panel-border)',
+                color: 'var(--text-secondary)',
+              }}
             >
               {t('cancel', language)}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               type="submit"
               disabled={
-                !selectedExchange ||
+                credentialsLoading || !!credentialsError || !selectedExchange ||
                 (selectedExchange.id === 'binance' &&
                   (!apiKey.trim() || !secretKey.trim())) ||
                 (selectedExchange.id === 'okx' &&
@@ -2501,50 +1984,70 @@ function ExchangeConfigModal({
                   (!apiKey.trim() || !secretKey.trim()))
               }
               className="flex-1 px-4 py-2 rounded text-sm font-semibold disabled:opacity-50"
-              style={{ background: '#F0B90B', color: '#000' }}
+              style={{ background: 'var(--binance-yellow)', color: '#000' }}
             >
               {t('saveConfig', language)}
-            </button>
+            </UiButton>
           </div>
-        </form>
+        </UiForm>
       </div>
 
       {/* Binance Setup Guide Modal */}
       {showGuide && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowGuide(false)}
-        >
-          <div
-            className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl relative"
-            style={{ background: '#1E2329' }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <UiDialog onClose={() => setShowGuide(false)} width={880}>
+          <div onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3
                 className="text-xl font-bold flex items-center gap-2"
-                style={{ color: '#EAECEF' }}
+                style={{ color: 'var(--foreground)' }}
               >
-                <BookOpen className="w-6 h-6" style={{ color: '#F0B90B' }} />
+                <BookOpen
+                  className="w-6 h-6"
+                  style={{ color: 'var(--binance-yellow)' }}
+                />
                 {t('binanceSetupGuide', language)}
               </h3>
-              <button
+              <UiButton
                 onClick={() => setShowGuide(false)}
-                className="px-4 py-2 rounded text-sm font-semibold transition-all hover:scale-105"
-                style={{ background: '#2B3139', color: '#848E9C' }}
+                className="px-4 py-2 rounded text-sm font-semibold transition-all "
+                style={{
+                  background: 'var(--panel-border)',
+                  color: 'var(--text-secondary)',
+                }}
               >
                 {t('closeGuide', language)}
-              </button>
+              </UiButton>
             </div>
             <div className="overflow-y-auto max-h-[80vh]">
-              <img
-                src="/images/guide.png"
-                alt={t('binanceSetupGuide', language)}
-                className="w-full h-auto rounded"
-              />
+              <ol className="list-decimal pl-6 space-y-4 text-gray-300 leading-7">
+                <li>
+                  {uiText(
+                    '在交易所确认合约账户已开通，并根据策略要求设置持仓模式和保证金模式。',
+                    language
+                  )}{' '}
+                </li>
+                <li>
+                  {uiText(
+                    '在交易所账户的 API 管理中创建专用密钥，仅启用所需的读取与合约交易权限，保持提现权限关闭。',
+                    language
+                  )}{' '}
+                </li>
+                <li>
+                  {uiText(
+                    '根据交易所要求设置服务器出口 IP 白名单，并将 API 密钥和密钥密码填入此工作台。',
+                    language
+                  )}{' '}
+                </li>
+                <li>
+                  {uiText(
+                    '保存后检查连接、余额与仓位配置。确认参数后，再自主决定是否启动交易员。',
+                    language
+                  )}{' '}
+                </li>
+              </ol>
             </div>
           </div>
-        </div>
+        </UiDialog>
       )}
 
       {/* Two Stage Key Modal */}
@@ -2556,6 +2059,6 @@ function ExchangeConfigModal({
         onCancel={handleSecureInputCancel}
         onComplete={handleSecureInputComplete}
       />
-    </div>
+    </UiDialog>
   )
 }

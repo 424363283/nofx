@@ -8,7 +8,7 @@ This guide helps you diagnose and fix common issues before submitting a bug repo
 
 Before reporting a bug, please check:
 
-1. ✅ **Backend is running**: `docker compose ps` or `ps aux | grep nofx`
+1. ✅ **Backend is running**: `docker compose ps` or `ps aux | grep guanlan`
 2. ✅ **Frontend is accessible**: Open http://localhost:3000 in browser
 3. ✅ **API is responding**: `curl http://localhost:8080/api/health`
 4. ✅ **Check logs for errors**: See [How to Capture Logs](#how-to-capture-logs) below
@@ -226,7 +226,7 @@ docker info | grep -A 10 "Registry Mirrors"
 # Should show your configured mirrors
 ```
 
-**Related Issue:** [#168](https://github.com/tinkle-community/nofx/issues/168)
+**Related Issue:** [#168](#)
 
 ---
 
@@ -242,7 +242,7 @@ lsof -i :8080
 netstat -tulpn | grep 8080
 
 # Kill the process or change port in .env
-NOFX_BACKEND_PORT=8081
+GUANLAN_BACKEND_PORT=8081
 ```
 
 ---
@@ -307,7 +307,7 @@ If using Docker, container time may be out of sync with host:
 
 ```bash
 # Check container time
-docker exec nofx-backend date
+docker exec guanlan-backend date
 
 # If time is wrong, restart Docker service
 sudo systemctl restart docker
@@ -330,7 +330,7 @@ If errors persist after time sync:
    - Login to Binance → API Management
    - Delete old key
    - Create new key
-   - Update NOFX configuration
+   - Update GUANLAN configuration
 
 **Solution 3: Check Rate Limits**
 
@@ -340,7 +340,7 @@ Binance has strict API rate limits:
 - Reduce number of traders
 - Increase decision interval (e.g., from 1min to 3-5min)
 
-**Related Issue:** [#60](https://github.com/tinkle-community/nofx/issues/60)
+**Related Issue:** [#60](#)
 
 ---
 
@@ -387,15 +387,15 @@ Binance has strict API rate limits:
 
 **Solution:**
 ```bash
-# Stop all NOFX processes
+# Stop all GUANLAN processes
 docker compose down
 # OR
-pkill nofx
+pkill guanlan
 
 # Restart
 docker compose up -d
 # OR
-./nofx
+./guanlan
 ```
 
 ---
@@ -439,13 +439,13 @@ docker compose logs backend --tail=500 > backend_logs.txt
 
 **Manual/PM2:**
 ```bash
-# Terminal where you ran ./nofx shows logs
+# Terminal where you ran ./guanlan shows logs
 
 # PM2:
-pm2 logs nofx --lines 100
+pm2 logs guanlan --lines 100
 
 # Save to file
-pm2 logs nofx --lines 500 > backend_logs.txt
+pm2 logs guanlan --lines 500 > backend_logs.txt
 ```
 
 ---
@@ -559,8 +559,8 @@ If you've tried all the above and still have problems:
    - Describe what you've already tried
 
 3. **Join Community:**
-   - [Telegram Developer Community](https://t.me/nofx_dev_community)
-   - [GitHub Discussions](https://github.com/tinkle-community/nofx/discussions)
+   - [Telegram Developer Community](#)
+   - [GitHub Discussions](#)
 
 ---
 

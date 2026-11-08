@@ -1,3 +1,5 @@
+import { UiCard } from './design/Controls'
+import { UiForm, UiInput, UiButton } from './design/Controls'
 import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -5,7 +7,7 @@ import { t } from '../i18n/translations'
 import HeaderBar from './landing/HeaderBar'
 
 export function LoginPage() {
-  const { language } = useLanguage()
+  const { language, setLanguage } = useLanguage()
   const { login, loginAdmin, verifyOTP } = useAuth()
   const [step, setStep] = useState<'login' | 'otp'>('login')
   const [email, setEmail] = useState('')
@@ -65,31 +67,20 @@ export function LoginPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--brand-black)' }}>
       <HeaderBar
-        onLoginClick={() => {}}
         isLoggedIn={false}
-        isHomePage={false}
         currentPage="login"
         language={language}
-        onLanguageChange={() => {}}
-        onPageChange={(page) => {
-          console.log('LoginPage onPageChange called with:', page)
-          if (page === 'competition') {
-            window.location.href = '/competition'
-          }
-        }}
+        onLanguageChange={setLanguage}
       />
 
-      <div
-        className="flex items-center justify-center pt-20"
-        style={{ minHeight: 'calc(100vh - 80px)' }}
-      >
-        <div className="w-full max-w-md">
+      <div id="main-content" className="desk-auth">
+        <div className="desk-auth-card ant-desk-auth">
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
               <img
-                src="/icons/nofx.svg"
-                alt="NoFx Logo"
+                src="/icons/trading-desk.svg"
+                alt="观澜 Logo"
                 className="w-16 h-16 object-contain"
               />
             </div>
@@ -97,7 +88,7 @@ export function LoginPage() {
               className="text-2xl font-bold"
               style={{ color: 'var(--brand-light-gray)' }}
             >
-              登录 NOFX
+              登录 观澜
             </h1>
             <p
               className="text-sm mt-2"
@@ -108,7 +99,7 @@ export function LoginPage() {
           </div>
 
           {/* Login Form */}
-          <div
+          <UiCard
             className="rounded-lg p-6"
             style={{
               background: 'var(--panel-bg)',
@@ -116,15 +107,17 @@ export function LoginPage() {
             }}
           >
             {adminMode ? (
-              <form onSubmit={handleAdminLogin} className="space-y-4">
+              <UiForm onSubmit={handleAdminLogin} className="space-y-4">
                 <div>
                   <label
+                    htmlFor="loginpage-1"
                     className="block text-sm font-semibold mb-2"
                     style={{ color: 'var(--brand-light-gray)' }}
                   >
                     管理员密码
                   </label>
-                  <input
+                  <UiInput
+                    id="loginpage-1"
                     type="password"
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
@@ -151,28 +144,30 @@ export function LoginPage() {
                   </div>
                 )}
 
-                <button
+                <UiButton
                   type="submit"
                   disabled={loading}
-                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50"
+                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all  disabled:opacity-50"
                   style={{
                     background: 'var(--brand-yellow)',
                     color: 'var(--brand-black)',
                   }}
                 >
                   {loading ? t('loading', language) : '登录'}
-                </button>
-              </form>
+                </UiButton>
+              </UiForm>
             ) : step === 'login' ? (
-              <form onSubmit={handleLogin} className="space-y-4">
+              <UiForm onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label
+                    htmlFor="loginpage-2"
                     className="block text-sm font-semibold mb-2"
                     style={{ color: 'var(--brand-light-gray)' }}
                   >
                     {t('email', language)}
                   </label>
-                  <input
+                  <UiInput
+                    id="loginpage-2"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -189,12 +184,14 @@ export function LoginPage() {
 
                 <div>
                   <label
+                    htmlFor="loginpage-3"
                     className="block text-sm font-semibold mb-2"
                     style={{ color: 'var(--brand-light-gray)' }}
                   >
                     {t('password', language)}
                   </label>
-                  <input
+                  <UiInput
+                    id="loginpage-3"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -208,17 +205,17 @@ export function LoginPage() {
                     required
                   />
                   <div className="text-right mt-2">
-                    <button
+                    <UiButton
                       type="button"
                       onClick={() => {
                         window.history.pushState({}, '', '/reset-password')
                         window.dispatchEvent(new PopStateEvent('popstate'))
                       }}
                       className="text-xs hover:underline"
-                      style={{ color: '#F0B90B' }}
+                      style={{ color: 'var(--binance-yellow)' }}
                     >
                       {t('forgotPassword', language)}
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
 
@@ -234,10 +231,10 @@ export function LoginPage() {
                   </div>
                 )}
 
-                <button
+                <UiButton
                   type="submit"
                   disabled={loading}
-                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50"
+                  className="w-full px-4 py-2 rounded text-sm font-semibold transition-all  disabled:opacity-50"
                   style={{
                     background: 'var(--brand-yellow)',
                     color: 'var(--brand-black)',
@@ -246,13 +243,16 @@ export function LoginPage() {
                   {loading
                     ? t('loading', language)
                     : t('loginButton', language)}
-                </button>
-              </form>
+                </UiButton>
+              </UiForm>
             ) : (
-              <form onSubmit={handleOTPVerify} className="space-y-4">
+              <UiForm onSubmit={handleOTPVerify} className="space-y-4">
                 <div className="text-center mb-4">
                   <div className="text-4xl mb-2">📱</div>
-                  <p className="text-sm" style={{ color: '#848E9C' }}>
+                  <p
+                    className="text-sm"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
                     {t('scanQRCodeInstructions', language)}
                     <br />
                     {t('enterOTPCode', language)}
@@ -261,12 +261,14 @@ export function LoginPage() {
 
                 <div>
                   <label
+                    htmlFor="loginpage-4"
                     className="block text-sm font-semibold mb-2"
                     style={{ color: 'var(--brand-light-gray)' }}
                   >
                     {t('otpCode', language)}
                   </label>
-                  <input
+                  <UiInput
+                    id="loginpage-4"
                     type="text"
                     value={otpCode}
                     onChange={(e) =>
@@ -297,7 +299,7 @@ export function LoginPage() {
                 )}
 
                 <div className="flex gap-3">
-                  <button
+                  <UiButton
                     type="button"
                     onClick={() => setStep('login')}
                     className="flex-1 px-4 py-2 rounded text-sm font-semibold"
@@ -307,28 +309,31 @@ export function LoginPage() {
                     }}
                   >
                     {t('back', language)}
-                  </button>
-                  <button
+                  </UiButton>
+                  <UiButton
                     type="submit"
                     disabled={loading || otpCode.length !== 6}
-                    className="flex-1 px-4 py-2 rounded text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50"
-                    style={{ background: '#F0B90B', color: '#000' }}
+                    className="flex-1 px-4 py-2 rounded text-sm font-semibold transition-all  disabled:opacity-50"
+                    style={{
+                      background: 'var(--binance-yellow)',
+                      color: '#000',
+                    }}
                   >
                     {loading
                       ? t('loading', language)
                       : t('verifyOTP', language)}
-                  </button>
+                  </UiButton>
                 </div>
-              </form>
+              </UiForm>
             )}
-          </div>
+          </UiCard>
 
           {/* Register Link */}
           {!adminMode && (
             <div className="text-center mt-6">
               <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                 还没有账户？{' '}
-                <button
+                <UiButton
                   onClick={() => {
                     window.history.pushState({}, '', '/register')
                     window.dispatchEvent(new PopStateEvent('popstate'))
@@ -337,7 +342,7 @@ export function LoginPage() {
                   style={{ color: 'var(--brand-yellow)' }}
                 >
                   立即注册
-                </button>
+                </UiButton>
               </p>
             </div>
           )}

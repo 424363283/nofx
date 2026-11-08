@@ -2,7 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
-	"nofx/logger"
+	"guanlan/logger"
 	"sort"
 	"sync"
 	"time"

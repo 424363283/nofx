@@ -1,22 +1,27 @@
 package trader
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"guanlan/decision"
+	"guanlan/logger"
+	"guanlan/market"
+	"guanlan/mcp"
+	"guanlan/pool"
+	"guanlan/signals"
 	"log"
 	"math"
-	"nofx/decision"
-	"nofx/logger"
-	"nofx/market"
-	"nofx/mcp"
-	"nofx/pool"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // AutoTraderConfig 自动交易配置（简化版 - AI全权决策）
 type AutoTraderConfig struct {
+	SignalConfig  string
+	SignalSymbols string
 	// Trader标识
 	ID      string // Trader唯一标识（用于日志目录等）
 	Name    string // Trader显示名称
@@ -52,7 +57,7 @@ type AutoTraderConfig struct {
 	CustomModelName string
 
 	// 扫描配置
-	ScanInterval time.Duration // 扫描间隔（建议3分钟）
+	ScanInterval time.Duration // 扫描间隔（1至60分钟，默认3分钟）
 
 	// 账户配置
 	InitialBalance float64 // 初始金额（用于计算盈亏，需手动设置）
@@ -79,34 +84,39 @@ type AutoTraderConfig struct {
 
 // AutoTrader 自动交易器
 type AutoTrader struct {
-	id                    string // Trader唯一标识
-	name                  string // Trader显示名称
-	aiModel               string // AI模型名称
-	exchange              string // 交易平台名称
-	config                AutoTraderConfig
-	trader                Trader // 使用Trader接口（支持多平台）
-	mcpClient             *mcp.Client
-	decisionLogger        *logger.DecisionLogger // 决策日志记录器
-	initialBalance        float64
-	dailyPnL              float64
-	customPrompt          string   // 自定义交易策略prompt
-	overrideBasePrompt    bool     // 是否覆盖基础prompt
-	systemPromptTemplate  string   // 系统提示词模板名称
-	defaultCoins          []string // 默认币种列表（从数据库获取）
-	tradingCoins          []string // 实际交易币种列表
-	lastResetTime         time.Time
-	stopUntil             time.Time
-	isRunning             bool
-	startTime             time.Time          // 系统启动时间
-	callCount             int                // AI调用次数
-	positionFirstSeenTime map[string]int64   // 持仓首次出现时间 (symbol_side -> timestamp毫秒)
-	stopMonitorCh         chan struct{}      // 用于停止监控goroutine
-	monitorWg             sync.WaitGroup     // 用于等待监控goroutine结束
-	peakPnLCache          map[string]float64 // 最高收益缓存 (symbol -> 峰值盈亏百分比)
-	peakPnLCacheMutex     sync.RWMutex       // 缓存读写锁
-	lastBalanceSyncTime   time.Time          // 上次余额同步时间
-	database              interface{}        // 数据库引用（用于自动更新余额）
-	userID                string             // 用户ID
+	radarMu                sync.RWMutex
+	radarOverride          *bool
+	id                     string // Trader唯一标识
+	name                   string // Trader显示名称
+	aiModel                string // AI模型名称
+	exchange               string // 交易平台名称
+	config                 AutoTraderConfig
+	trader                 Trader // 使用Trader接口（支持多平台）
+	mcpClient              *mcp.Client
+	decisionLogger         *logger.DecisionLogger // 决策日志记录器
+	initialBalance         float64
+	dailyPnL               float64
+	customPrompt           string   // 自定义交易策略prompt
+	overrideBasePrompt     bool     // 是否覆盖基础prompt
+	systemPromptTemplate   string   // 系统提示词模板名称
+	defaultCoins           []string // 默认币种列表（从数据库获取）
+	tradingCoins           []string // 实际交易币种列表
+	lastResetTime          time.Time
+	stopUntil              time.Time
+	isRunning              bool
+	startTime              time.Time    // 系统启动时间
+	callCount              atomic.Int64 // 决策周期计数，与状态接口并发访问
+	entryProtectionBlocked atomic.Bool
+	positionFirstSeenTime  map[string]int64   // 持仓首次出现时间 (symbol_side -> timestamp毫秒)
+	stopMonitorCh          chan struct{}      // 用于停止监控goroutine
+	monitorWg              sync.WaitGroup     // 用于等待监控goroutine结束
+	peakPnLCache           map[string]float64 // 最高收益缓存 (symbol -> 峰值盈亏百分比)
+	peakPnLCacheMutex      sync.RWMutex       // 缓存读写锁
+	lastBalanceSyncTime    time.Time          // 上次余额同步时间
+	database               interface{}        // 数据库引用（用于自动更新余额）
+	userID                 string             // 用户ID
+	scanIntervalNanos      atomic.Int64
+	scanIntervalChanged    chan struct{}
 }
 
 // NewAutoTrader 创建自动交易器
@@ -117,6 +127,9 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 	}
 	if config.Name == "" {
 		config.Name = "Default Trader"
+	}
+	if config.ScanInterval <= 0 {
+		config.ScanInterval = 3 * time.Minute
 	}
 	if config.AIModel == "" {
 		if config.UseQwen {
@@ -129,7 +142,10 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 	mcpClient := mcp.New()
 
 	// 初始化AI
-	if config.AIModel == "custom" {
+	if config.AIModel != "deepseek" && config.AIModel != "qwen" {
+		if config.CustomAPIURL == "" || config.CustomModelName == "" || config.CustomAPIKey == "" {
+			return nil, fmt.Errorf("请配置模型的 API 地址、模型名称和 API Key")
+		}
 		// 使用自定义API
 		mcpClient.SetCustomAPI(config.CustomAPIURL, config.CustomAPIKey, config.CustomModelName)
 		log.Printf("🤖 [%s] 使用自定义AI API: %s (模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
@@ -223,7 +239,6 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 		tradingCoins:          config.TradingCoins,
 		lastResetTime:         time.Now(),
 		startTime:             time.Now(),
-		callCount:             0,
 		isRunning:             false,
 		positionFirstSeenTime: make(map[string]int64),
 		stopMonitorCh:         make(chan struct{}),
@@ -233,7 +248,35 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 		lastBalanceSyncTime:   time.Now(), // 初始化为当前时间
 		database:              database,
 		userID:                userID,
+		scanIntervalChanged:   make(chan struct{}, 1),
 	}, nil
+}
+
+// ScanInterval is shared by the running scheduler and status API.
+func (at *AutoTrader) ScanInterval() time.Duration {
+	if interval := at.scanIntervalNanos.Load(); interval > 0 {
+		return time.Duration(interval)
+	}
+	if at.config.ScanInterval > 0 {
+		return at.config.ScanInterval
+	}
+	return 3 * time.Minute
+}
+
+// SetScanInterval wakes the scheduler without restarting the trader or resetting history.
+func (at *AutoTrader) SetScanInterval(interval time.Duration) error {
+	if interval < time.Minute || interval > time.Hour {
+		return fmt.Errorf("扫描间隔必须为1至60分钟")
+	}
+	if interval == at.ScanInterval() {
+		return nil
+	}
+	at.scanIntervalNanos.Store(int64(interval))
+	select {
+	case at.scanIntervalChanged <- struct{}{}:
+	default: // Coalesce updates; the scheduler reads the latest value.
+	}
+	return nil
 }
 
 // Run 运行自动交易主循环
@@ -241,13 +284,13 @@ func (at *AutoTrader) Run() error {
 	at.isRunning = true
 	log.Println("🚀 AI驱动自动交易系统启动")
 	log.Printf("💰 初始余额: %.2f USDT", at.initialBalance)
-	log.Printf("⚙️  扫描间隔: %v", at.config.ScanInterval)
+	log.Printf("⚙️  扫描间隔: %v", at.ScanInterval())
 	log.Println("🤖 AI将全权决定杠杆、仓位大小、止损止盈等参数")
 
 	// 启动回撤监控
 	at.startDrawdownMonitor()
 
-	ticker := time.NewTicker(at.config.ScanInterval)
+	ticker := time.NewTicker(at.ScanInterval())
 	defer ticker.Stop()
 
 	// 首次立即执行
@@ -257,6 +300,11 @@ func (at *AutoTrader) Run() error {
 
 	for at.isRunning {
 		select {
+		case <-at.stopMonitorCh:
+			return nil
+		case <-at.scanIntervalChanged:
+			ticker.Reset(at.ScanInterval())
+			log.Printf("⚙️ [%s] 扫描间隔已更新: %v", at.name, at.ScanInterval())
 		case <-ticker.C:
 			if err := at.runCycle(); err != nil {
 				log.Printf("❌ 执行失败: %v", err)
@@ -375,10 +423,17 @@ func (at *AutoTrader) autoSyncBalanceIfNeeded() {
 
 // runCycle 运行一个交易周期（使用AI全权决策）
 func (at *AutoTrader) runCycle() error {
-	at.callCount++
+	if exchange, ok := at.trader.(*FuturesTrader); ok {
+		if exchange.binanceReadUnavailable() != nil {
+			// The first failure is already recorded. Do not flood decision history
+			// or call the model while current account data cannot be obtained.
+			return nil
+		}
+	}
+	cycleNumber := at.callCount.Add(1)
 
 	log.Print("\n" + strings.Repeat("=", 70) + "\n")
-	log.Printf("⏰ %s - AI决策周期 #%d", time.Now().Format("2006-01-02 15:04:05"), at.callCount)
+	log.Printf("⏰ %s - AI决策周期 #%d", time.Now().Format("2006-01-02 15:04:05"), cycleNumber)
 	log.Println(strings.Repeat("=", 70))
 
 	// 创建决策记录
@@ -446,6 +501,13 @@ func (at *AutoTrader) runCycle() error {
 
 	log.Printf("📊 账户净值: %.2f USDT | 可用: %.2f USDT | 持仓: %d",
 		ctx.Account.TotalEquity, ctx.Account.AvailableBalance, ctx.Account.PositionCount)
+	if len(ctx.SkippedEquities) > 0 {
+		record.ExecutionLog = append(record.ExecutionLog, "休市美股或类别未确认候选未送入AI（无持仓）："+strings.Join(ctx.SkippedEquities, ", "))
+	}
+	if len(ctx.CandidateCoins) == 0 && len(ctx.Positions) == 0 {
+		record.ExecutionLog = append(record.ExecutionLog, "本轮无可分析候选且无持仓，跳过AI调用。")
+		return at.decisionLogger.LogDecision(record)
+	}
 
 	// 5. 调用AI获取完整决策
 	log.Printf("🤖 正在请求AI分析并决策... [模板: %s]", at.systemPromptTemplate)
@@ -536,7 +598,24 @@ func (at *AutoTrader) runCycle() error {
 			Success:   false,
 		}
 
+		if (d.Action == "open_long" || d.Action == "open_short") && decisionEquityEntryClosed(ctx, d.Symbol) {
+			actionRecord.Error = "美股常规交易时段已关闭，拒绝新开仓；已有持仓管理不受影响"
+			record.Success = false
+			record.Decisions = append(record.Decisions, actionRecord)
+			record.ExecutionLog = append(record.ExecutionLog, actionRecord.Error+": "+d.Symbol)
+			continue
+		}
+		if ctx.NativeSignals && (d.Action == "open_long" || d.Action == "open_short") {
+			allowed := nativeSignalAllowsOpen(ctx, d.Symbol)
+			if !allowed {
+				actionRecord.Error = "标的不在本轮有效币安信号候选中，拒绝新增开仓"
+				record.Decisions = append(record.Decisions, actionRecord)
+				record.ExecutionLog = append(record.ExecutionLog, actionRecord.Error+": "+d.Symbol)
+				continue
+			}
+		}
 		if err := at.executeDecisionWithRecord(&d, &actionRecord); err != nil {
+			record.Success = false
 			log.Printf("❌ 执行决策失败 (%s %s): %v", d.Symbol, d.Action, err)
 			actionRecord.Error = err.Error()
 			record.ExecutionLog = append(record.ExecutionLog, fmt.Sprintf("❌ %s %s 失败: %v", d.Symbol, d.Action, err))
@@ -662,9 +741,40 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 	}
 
 	// 3. 获取交易员的候选币种池
-	candidateCoins, err := at.getCandidateCoins()
+	nativeConfig, nativeErr := at.signalConfig()
+	candidateCoins, err := at.candidateCoinsForConfig(nativeConfig, nativeErr)
 	if err != nil {
 		return nil, fmt.Errorf("获取候选币种失败: %w", err)
+	}
+	var skippedEquities []string
+	var equitySession string
+	if at.exchange == "binance" {
+		categories := map[string]string{}
+		needsMetadata := false
+		for _, coin := range candidateCoins {
+			var evidence struct {
+				Category string `json:"category"`
+			}
+			if json.Unmarshal([]byte(coin.SignalEvidence), &evidence) != nil || evidence.Category == "" {
+				needsMetadata = true
+			}
+		}
+		if needsMetadata {
+			request, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			loaded, loadErr := signals.Default.ContractCategories(request)
+			cancel()
+			if loadErr == nil {
+				categories = loaded
+			} else {
+				log.Printf("美股候选分类元数据不可用，非交易时段跳过类别未确认的新候选")
+			}
+		}
+		now := time.Now()
+		_, equitySession = signals.USEquitySession(now)
+		candidateCoins, skippedEquities = decision.FilterEquityCandidates(candidateCoins, positionInfos, categories, now)
+		if len(skippedEquities) > 0 {
+			log.Printf("%s：跳过%d个无持仓美股/类别未确认候选", equitySession, len(skippedEquities))
+		}
 	}
 
 	// 4. 计算总盈亏
@@ -690,11 +800,15 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 
 	// 6. 构建上下文
 	ctx := &decision.Context{
-		CurrentTime:     time.Now().Format("2006-01-02 15:04:05"),
-		RuntimeMinutes:  int(time.Since(at.startTime).Minutes()),
-		CallCount:       at.callCount,
-		BTCETHLeverage:  at.config.BTCETHLeverage,  // 使用配置的杠杆倍数
-		AltcoinLeverage: at.config.AltcoinLeverage, // 使用配置的杠杆倍数
+		EquitySession:     equitySession,
+		SkippedEquities:   skippedEquities,
+		SkipLegacySignals: at.config.SignalConfig != "" && at.config.SignalConfig != "{}",
+		NativeSignals:     nativeErr != nil || nativeConfig.Enabled || nativeConfig.RadarEnabled,
+		CurrentTime:       time.Now().Format(time.RFC3339),
+		RuntimeMinutes:    int(time.Since(at.startTime).Minutes()),
+		CallCount:         int(at.callCount.Load()),
+		BTCETHLeverage:    at.config.BTCETHLeverage,  // 使用配置的杠杆倍数
+		AltcoinLeverage:   at.config.AltcoinLeverage, // 使用配置的杠杆倍数
 		Account: decision.AccountInfo{
 			TotalEquity:      totalEquity,
 			AvailableBalance: availableBalance,
@@ -714,6 +828,10 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 
 // executeDecisionWithRecord 执行AI决策并记录详细信息
 func (at *AutoTrader) executeDecisionWithRecord(decision *decision.Decision, actionRecord *logger.DecisionAction) error {
+	if (decision.Action == "open_long" || decision.Action == "open_short") && at.entryProtectionBlocked.Load() {
+		return fmt.Errorf("保护单异常尚未解除，暂停新开仓；已有持仓继续管理")
+	}
+
 	switch decision.Action {
 	case "open_long":
 		return at.executeOpenLongWithRecord(decision, actionRecord)
@@ -742,11 +860,17 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *decision.Decision, act
 	log.Printf("  📈 开多仓: %s", decision.Symbol)
 
 	// ⚠️ 关键：检查是否已有同币种同方向持仓，如果有则拒绝开仓（防止仓位叠加超限）
+	if exchange, ok := at.trader.(*FuturesTrader); ok {
+		exchange.invalidatePositionCaches()
+	}
 	positions, err := at.trader.GetPositions()
+	if err != nil {
+		return fmt.Errorf("开仓前无法确认现有持仓: %w", err)
+	}
 	if err == nil {
 		for _, pos := range positions {
-			if pos["symbol"] == decision.Symbol && pos["side"] == "long" {
-				return fmt.Errorf("❌ %s 已有多仓，拒绝开仓以防止仓位叠加超限。如需换仓，请先给出 close_long 决策", decision.Symbol)
+			if pos["symbol"] == decision.Symbol {
+				return fmt.Errorf("❌ %s 已有持仓，拒绝叠加或反向开仓；请先处理现有持仓", decision.Symbol)
 			}
 		}
 	}
@@ -757,31 +881,21 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *decision.Decision, act
 		return err
 	}
 
+	if err := at.prepareEntryProtection(decision); err != nil {
+		return err
+	}
+	actionRecord.Price = marketData.CurrentPrice
+	actionRecord.StopLoss, actionRecord.TakeProfit = decision.StopLoss, decision.TakeProfit
+	if err := at.sizeSignalEntry(decision, marketData.CurrentPrice, positions); err != nil {
+		return err
+	}
+	if err := validateOpenEntry(decision, marketData.CurrentPrice); err != nil {
+		return err
+	}
 	// 计算数量
 	quantity := decision.PositionSizeUSD / marketData.CurrentPrice
 	actionRecord.Quantity = quantity
 	actionRecord.Price = marketData.CurrentPrice
-
-	// ⚠️ 保证金验证：防止保证金不足错误（code=-2019）
-	requiredMargin := decision.PositionSizeUSD / float64(decision.Leverage)
-
-	balance, err := at.trader.GetBalance()
-	if err != nil {
-		return fmt.Errorf("获取账户余额失败: %w", err)
-	}
-	availableBalance := 0.0
-	if avail, ok := balance["availableBalance"].(float64); ok {
-		availableBalance = avail
-	}
-
-	// 手续费估算（Taker费率 0.04%）
-	estimatedFee := decision.PositionSizeUSD * 0.0004
-	totalRequired := requiredMargin + estimatedFee
-
-	if totalRequired > availableBalance {
-		return fmt.Errorf("❌ 保证金不足: 需要 %.2f USDT（保证金 %.2f + 手续费 %.2f），可用 %.2f USDT",
-			totalRequired, requiredMargin, estimatedFee, availableBalance)
-	}
 
 	// 设置仓位模式
 	if err := at.trader.SetMarginMode(decision.Symbol, at.config.IsCrossMargin); err != nil {
@@ -806,15 +920,14 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *decision.Decision, act
 	posKey := decision.Symbol + "_long"
 	at.positionFirstSeenTime[posKey] = time.Now().UnixMilli()
 
-	// 设置止损止盈
-	if err := at.trader.SetStopLoss(decision.Symbol, "LONG", quantity, decision.StopLoss); err != nil {
-		log.Printf("  ⚠ 设置止损失败: %v", err)
+	if filled, ok := order["executedQty"].(float64); ok && filled > 0 {
+		quantity = filled
+		actionRecord.Quantity = filled
 	}
-	if err := at.trader.SetTakeProfit(decision.Symbol, "LONG", quantity, decision.TakeProfit); err != nil {
-		log.Printf("  ⚠ 设置止盈失败: %v", err)
+	if price, ok := order["avgPrice"].(float64); ok && price > 0 {
+		actionRecord.Price = price
 	}
-
-	return nil
+	return at.protectNewEntry(decision, "LONG", quantity, actionRecord)
 }
 
 // executeOpenShortWithRecord 执行开空仓并记录详细信息
@@ -822,11 +935,17 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *decision.Decision, ac
 	log.Printf("  📉 开空仓: %s", decision.Symbol)
 
 	// ⚠️ 关键：检查是否已有同币种同方向持仓，如果有则拒绝开仓（防止仓位叠加超限）
+	if exchange, ok := at.trader.(*FuturesTrader); ok {
+		exchange.invalidatePositionCaches()
+	}
 	positions, err := at.trader.GetPositions()
+	if err != nil {
+		return fmt.Errorf("开仓前无法确认现有持仓: %w", err)
+	}
 	if err == nil {
 		for _, pos := range positions {
-			if pos["symbol"] == decision.Symbol && pos["side"] == "short" {
-				return fmt.Errorf("❌ %s 已有空仓，拒绝开仓以防止仓位叠加超限。如需换仓，请先给出 close_short 决策", decision.Symbol)
+			if pos["symbol"] == decision.Symbol {
+				return fmt.Errorf("❌ %s 已有持仓，拒绝叠加或反向开仓；请先处理现有持仓", decision.Symbol)
 			}
 		}
 	}
@@ -838,30 +957,20 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *decision.Decision, ac
 	}
 
 	// 计算数量
+	if err := at.prepareEntryProtection(decision); err != nil {
+		return err
+	}
+	actionRecord.Price = marketData.CurrentPrice
+	actionRecord.StopLoss, actionRecord.TakeProfit = decision.StopLoss, decision.TakeProfit
+	if err := at.sizeSignalEntry(decision, marketData.CurrentPrice, positions); err != nil {
+		return err
+	}
+	if err := validateOpenEntry(decision, marketData.CurrentPrice); err != nil {
+		return err
+	}
 	quantity := decision.PositionSizeUSD / marketData.CurrentPrice
 	actionRecord.Quantity = quantity
 	actionRecord.Price = marketData.CurrentPrice
-
-	// ⚠️ 保证金验证：防止保证金不足错误（code=-2019）
-	requiredMargin := decision.PositionSizeUSD / float64(decision.Leverage)
-
-	balance, err := at.trader.GetBalance()
-	if err != nil {
-		return fmt.Errorf("获取账户余额失败: %w", err)
-	}
-	availableBalance := 0.0
-	if avail, ok := balance["availableBalance"].(float64); ok {
-		availableBalance = avail
-	}
-
-	// 手续费估算（Taker费率 0.04%）
-	estimatedFee := decision.PositionSizeUSD * 0.0004
-	totalRequired := requiredMargin + estimatedFee
-
-	if totalRequired > availableBalance {
-		return fmt.Errorf("❌ 保证金不足: 需要 %.2f USDT（保证金 %.2f + 手续费 %.2f），可用 %.2f USDT",
-			totalRequired, requiredMargin, estimatedFee, availableBalance)
-	}
 
 	// 设置仓位模式
 	if err := at.trader.SetMarginMode(decision.Symbol, at.config.IsCrossMargin); err != nil {
@@ -886,15 +995,14 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *decision.Decision, ac
 	posKey := decision.Symbol + "_short"
 	at.positionFirstSeenTime[posKey] = time.Now().UnixMilli()
 
-	// 设置止损止盈
-	if err := at.trader.SetStopLoss(decision.Symbol, "SHORT", quantity, decision.StopLoss); err != nil {
-		log.Printf("  ⚠ 设置止损失败: %v", err)
+	if filled, ok := order["executedQty"].(float64); ok && filled > 0 {
+		quantity = filled
+		actionRecord.Quantity = filled
 	}
-	if err := at.trader.SetTakeProfit(decision.Symbol, "SHORT", quantity, decision.TakeProfit); err != nil {
-		log.Printf("  ⚠ 设置止盈失败: %v", err)
+	if price, ok := order["avgPrice"].(float64); ok && price > 0 {
+		actionRecord.Price = price
 	}
-
-	return nil
+	return at.protectNewEntry(decision, "SHORT", quantity, actionRecord)
 }
 
 // executeCloseLongWithRecord 执行平多仓并记录详细信息
@@ -1241,19 +1349,20 @@ func (at *AutoTrader) GetStatus() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"trader_id":       at.id,
-		"trader_name":     at.name,
-		"ai_model":        at.aiModel,
-		"exchange":        at.exchange,
-		"is_running":      at.isRunning,
-		"start_time":      at.startTime.Format(time.RFC3339),
-		"runtime_minutes": int(time.Since(at.startTime).Minutes()),
-		"call_count":      at.callCount,
-		"initial_balance": at.initialBalance,
-		"scan_interval":   at.config.ScanInterval.String(),
-		"stop_until":      at.stopUntil.Format(time.RFC3339),
-		"last_reset_time": at.lastResetTime.Format(time.RFC3339),
-		"ai_provider":     aiProvider,
+		"trader_id":                at.id,
+		"trader_name":              at.name,
+		"ai_model":                 at.aiModel,
+		"exchange":                 at.exchange,
+		"is_running":               at.isRunning,
+		"entry_protection_blocked": at.entryProtectionBlocked.Load(),
+		"start_time":               at.startTime.Format(time.RFC3339),
+		"runtime_minutes":          int(time.Since(at.startTime).Minutes()),
+		"call_count":               int(at.callCount.Load()),
+		"initial_balance":          at.initialBalance,
+		"scan_interval":            at.ScanInterval().String(),
+		"stop_until":               at.stopUntil.Format(time.RFC3339),
+		"last_reset_time":          at.lastResetTime.Format(time.RFC3339),
+		"ai_provider":              aiProvider,
 	}
 }
 
@@ -1341,12 +1450,24 @@ func (at *AutoTrader) GetAccountInfo() (map[string]interface{}, error) {
 
 // GetPositions 获取持仓列表（用于API）
 func (at *AutoTrader) GetPositions() ([]map[string]interface{}, error) {
-	positions, err := at.trader.GetPositions()
+	positions, _, err := at.GetPositionsSnapshot()
+	return positions, err
+}
+
+func (at *AutoTrader) GetPositionsSnapshot() ([]map[string]interface{}, time.Time, error) {
+	var positions []map[string]interface{}
+	var err error
+	observedAt := time.Now()
+	if t, ok := at.trader.(*FuturesTrader); ok {
+		positions, observedAt, err = t.GetPositionsSnapshot()
+	} else {
+		positions, err = at.trader.GetPositions()
+	}
 	if err != nil {
-		return nil, fmt.Errorf("获取持仓失败: %w", err)
+		return nil, time.Time{}, fmt.Errorf("获取持仓失败: %w", err)
 	}
 
-	var result []map[string]interface{}
+	result := make([]map[string]interface{}, 0, len(positions))
 	for _, pos := range positions {
 		symbol := pos["symbol"].(string)
 		side := pos["side"].(string)
@@ -1388,7 +1509,7 @@ func (at *AutoTrader) GetPositions() ([]map[string]interface{}, error) {
 		})
 	}
 
-	return result, nil
+	return result, observedAt, nil
 }
 
 // sortDecisionsByPriority 对决策排序：先平仓，再开仓，最后hold/wait
@@ -1432,6 +1553,56 @@ func sortDecisionsByPriority(decisions []decision.Decision) []decision.Decision 
 
 // getCandidateCoins 获取交易员的候选币种列表
 func (at *AutoTrader) getCandidateCoins() ([]decision.CandidateCoin, error) {
+	cfg, err := at.signalConfig()
+	return at.candidateCoinsForConfig(cfg, err)
+}
+func (at *AutoTrader) candidateCoinsForConfig(cfg signals.Config, err error) ([]decision.CandidateCoin, error) {
+	if err != nil {
+		log.Printf("信号配置无效: %v", err)
+		return []decision.CandidateCoin{}, nil
+	}
+	if cfg.RadarEnabled {
+		if at.exchange != "binance" {
+			return []decision.CandidateCoin{}, nil
+		}
+		items, err := signals.LoadRadarCandidates(context.Background())
+		if err != nil {
+			log.Printf("异动候选暂停: %v", err)
+			return []decision.CandidateCoin{}, nil
+		}
+		coins := []decision.CandidateCoin{}
+		for _, item := range items {
+			evidence, _ := json.Marshal(item)
+			coins = append(coins, decision.CandidateCoin{Symbol: item.Symbol, Sources: []string{"binance_radar"}, SignalEvidence: string(evidence)})
+		}
+		// Rotate batches so lower-ranked anomalies are not permanently starved by the 15–30 candidate budget.
+		if len(coins) > 0 {
+			offset := ((int(at.callCount.Load()) * 15) % len(coins))
+			coins = append(coins[offset:], coins[:offset]...)
+		}
+		return coins, nil
+	}
+
+	if cfg.Enabled {
+		if at.exchange != "binance" {
+			return []decision.CandidateCoin{}, nil
+		}
+		result, err := signals.Default.Scan(context.Background(), cfg, strings.Split(at.config.SignalSymbols, ","))
+		if err != nil {
+			log.Printf("币安信号不可用，本轮不新增候选: %v", err)
+			return []decision.CandidateCoin{}, nil
+		}
+		for _, warning := range result.Warnings {
+			log.Printf("币安信号: %s", warning)
+		}
+		coins := []decision.CandidateCoin{}
+		for _, item := range result.Items {
+			evidence, _ := json.Marshal(item)
+			coins = append(coins, decision.CandidateCoin{Symbol: item.Symbol, Sources: []string{"binance_native"}, SignalEvidence: string(evidence)})
+		}
+		return coins, nil
+	}
+
 	if len(at.tradingCoins) == 0 {
 		// 使用数据库配置的默认币种列表
 		var candidateCoins []decision.CandidateCoin
@@ -1659,4 +1830,41 @@ func (at *AutoTrader) ClearPeakPnLCache(symbol, side string) {
 
 	posKey := symbol + "_" + side
 	delete(at.peakPnLCache, posKey)
+}
+
+// nativeSignalAllowsOpen requires both a selected signal and usable decision market data.
+func nativeSignalAllowsOpen(ctx *decision.Context, symbol string) bool {
+	if ctx.MarketDataMap[symbol] == nil {
+		return false
+	}
+	for _, coin := range ctx.CandidateCoins {
+		if coin.Symbol == symbol {
+			for _, source := range coin.Sources {
+				if source == "binance_radar" {
+					var item signals.RadarItem
+					if json.Unmarshal([]byte(coin.SignalEvidence), &item) != nil || item.PriceAsOf.IsZero() || time.Since(item.PriceAsOf) > 5*time.Minute || item.PriceAsOf.After(time.Now().Add(time.Minute)) {
+						return false
+					}
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// SetRadarEnabled takes effect for the next decision cycle without restarting a trader.
+func (at *AutoTrader) SetRadarEnabled(enabled bool) {
+	at.radarMu.Lock()
+	defer at.radarMu.Unlock()
+	at.radarOverride = &enabled
+}
+func (at *AutoTrader) signalConfig() (signals.Config, error) {
+	cfg, err := signals.Parse(at.config.SignalConfig)
+	at.radarMu.RLock()
+	defer at.radarMu.RUnlock()
+	if at.radarOverride != nil {
+		cfg.RadarEnabled = *at.radarOverride
+	}
+	return cfg, err
 }

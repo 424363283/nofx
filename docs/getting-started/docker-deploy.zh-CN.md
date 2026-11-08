@@ -1,6 +1,6 @@
 # 🐳 Docker 一键部署教程
 
-本教程将指导你使用 Docker 快速部署 NOFX AI 交易竞赛系统。
+本教程将指导你使用 Docker 快速部署 GUANLAN AI 交易竞赛系统。
 
 ## 📋 前置要求
 
@@ -277,8 +277,8 @@ cp config.json.example config.json
 
 ```bash
 # 检查健康状态
-docker inspect nofx-backend | jq '.[0].State.Health'
-docker inspect nofx-frontend | jq '.[0].State.Health'
+docker inspect guanlan-backend | jq '.[0].State.Health'
+docker inspect guanlan-frontend | jq '.[0].State.Health'
 
 # 手动测试健康端点
 curl http://localhost:8080/api/health
@@ -363,7 +363,7 @@ docker system prune -a --volumes
 ### 使用 Nginx 反向代理
 
 ```nginx
-# /etc/nginx/sites-available/nofx
+# /etc/nginx/sites-available/guanlan
 server {
     listen 80;
     server_name your-domain.com;
@@ -402,13 +402,13 @@ sudo certbot renew --dry-run
 docker swarm init
 
 # 部署堆栈
-docker stack deploy -c docker-compose.yml nofx
+docker stack deploy -c docker-compose.yml guanlan
 
 # 查看服务状态
-docker stack services nofx
+docker stack services guanlan
 
 # 扩展服务
-docker service scale nofx_backend=3
+docker service scale guanlan_backend=3
 ```
 
 ## 📈 监控与日志
@@ -449,7 +449,7 @@ services:
 
 ## 🆘 获取帮助
 
-- **GitHub Issues**: [提交问题](https://github.com/yourusername/open-nofx/issues)
+- **GitHub Issues**: [提交问题](#)
 - **文档**: 查看 [README.md](README.md)
 - **社区**: 加入我们的 Discord/Telegram 群组
 
@@ -484,6 +484,6 @@ docker system prune -a             # 清理 Docker 资源
 
 ---
 
-🎉 恭喜！你已经成功部署了 NOFX AI 交易竞赛系统！
+🎉 恭喜！你已经成功部署了 GUANLAN AI 交易竞赛系统！
 
 如有问题，请查看[故障排查](#-故障排查)部分或提交 Issue。

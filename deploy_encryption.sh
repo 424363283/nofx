@@ -1,5 +1,5 @@
 #!/bin/bash
-# NOFX 加密系統一鍵部署腳本
+# GUANLAN 加密系統一鍵部署腳本
 # 使用方式: chmod +x deploy_encryption.sh && ./deploy_encryption.sh
 
 set -e  # 遇到錯誤立即退出
@@ -110,12 +110,12 @@ install_dependencies() {
 run_tests() {
     log_info "運行加密系統測試..."
 
-    if go test ./crypto -v > /tmp/nofx_test.log 2>&1; then
+    if go test ./crypto -v > /tmp/guanlan_test.log 2>&1; then
         log_success "加密系統測試通過"
-        cat /tmp/nofx_test.log | grep "✅"
+        cat /tmp/guanlan_test.log | grep "✅"
     else
         log_error "加密系統測試失敗，詳情:"
-        cat /tmp/nofx_test.log
+        cat /tmp/guanlan_test.log
         exit 1
     fi
 }
@@ -159,17 +159,17 @@ setup_env_vars() {
             SHELL_RC="$HOME/.zshrc"
         fi
 
-        if ! grep -q "NOFX_MASTER_KEY" "$SHELL_RC" 2>/dev/null; then
+        if ! grep -q "GUANLAN_MASTER_KEY" "$SHELL_RC" 2>/dev/null; then
             echo "" >> "$SHELL_RC"
-            echo "# NOFX 加密系統主密鑰" >> "$SHELL_RC"
-            echo "export NOFX_MASTER_KEY='$MASTER_KEY'" >> "$SHELL_RC"
+            echo "# GUANLAN 加密系統主密鑰" >> "$SHELL_RC"
+            echo "export GUANLAN_MASTER_KEY='$MASTER_KEY'" >> "$SHELL_RC"
             log_success "主密鑰已添加到 $SHELL_RC"
         else
             log_warning "主密鑰已存在於 $SHELL_RC"
         fi
 
         # 導出到當前 session
-        export NOFX_MASTER_KEY="$MASTER_KEY"
+        export GUANLAN_MASTER_KEY="$MASTER_KEY"
         log_success "主密鑰已導出到當前 session"
     else
         log_warning "主密鑰文件未生成，請先運行應用初始化"
@@ -250,7 +250,7 @@ print_next_steps() {
 main() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}🔐 NOFX 加密系統部署腳本${NC}"
+    echo -e "${BLUE}🔐 GUANLAN 加密系統部署腳本${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 

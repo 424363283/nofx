@@ -1,4 +1,4 @@
-# 🤖 NOFX - Agentic Trading OS
+# 🤖 GUANLAN - Agentic Trading OS
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![React](https://img.shields.io/badge/React-18+-61DAFB?style=flat&logo=react)](https://reactjs.org/)
@@ -8,7 +8,7 @@
 
 **Языки / Languages:** [English](../../../README.md) | [中文](../zh-CN/README.md) | [Українська](../uk/README.md) | [Русский](../ru/README.md) | [日本語](../ja/README.md)
 
-**Официальный Twitter:** [@nofx_ai](https://x.com/nofx_ai)
+**Официальный Twitter:** [@guanlan_ai](#)
 
 **📚 Документация:** [Главная](../../README.md) | [Начало работы](../../getting-started/README.md) | [Журнал изменений](../../../CHANGELOG.zh-CN.md) | [Сообщество](../../community/README.md)
 
@@ -33,7 +33,7 @@
 
 ## 🚀 Универсальная AI Торговая Операционная Система
 
-**NOFX** - это **универсальная Agentic Trading OS**, построенная на единой архитектуре. Мы успешно замкнули цикл на криптовалютных рынках: **"Решение Multi-Agent → Единый Контроль Рисков → Исполнение с Низкой Задержкой → Бэктестинг Реальных/Бумажных Счетов"**, и сейчас расширяем этот же технологический стек на **акции, фьючерсы, опционы, форекс и все финансовые рынки**.
+**GUANLAN** - это **универсальная Agentic Trading OS**, построенная на единой архитектуре. Мы успешно замкнули цикл на криптовалютных рынках: **"Решение Multi-Agent → Единый Контроль Рисков → Исполнение с Низкой Задержкой → Бэктестинг Реальных/Бумажных Счетов"**, и сейчас расширяем этот же технологический стек на **акции, фьючерсы, опционы, форекс и все финансовые рынки**.
 
 ### 🎯 Основные Возможности
 
@@ -54,7 +54,7 @@
 
 **По вопросам инвестиций**, пишите в DM **Tinkle** или **Zack** в Twitter.
 
-**По вопросам партнерства и сотрудничества**, пишите в DM нашего официального Twitter [@nofx_ai](https://x.com/nofx_ai).
+**По вопросам партнерства и сотрудничества**, пишите в DM нашего официального Twitter [@guanlan_ai](#).
 
 ---
 
@@ -64,7 +64,7 @@
 
 Присоединяйтесь к нашему сообществу разработчиков в Telegram для обсуждения, обмена идеями и получения поддержки:
 
-**💬 [Сообщество разработчиков NOFX](https://t.me/nofx_dev_community)**
+**💬 [Сообщество разработчиков GUANLAN](#)**
 
 ---
 
@@ -72,7 +72,7 @@
 
 ### 🚀 Поддержка нескольких бирж!
 
-NOFX теперь поддерживает **три основные биржи**: Binance, Hyperliquid и Aster DEX!
+GUANLAN теперь поддерживает **три основные биржи**: Binance, Hyperliquid и Aster DEX!
 
 #### **Биржа Hyperliquid**
 
@@ -199,7 +199,7 @@ NOFX теперь поддерживает **три основные биржи*
 
 ## 🔮 Дорожная Карта - Расширение на Универсальные Рынки
 
-Миссия NOFX - стать **Универсальной AI Торговой Операционной Системой** для всех финансовых рынков.
+Миссия GUANLAN - стать **Универсальной AI Торговой Операционной Системой** для всех финансовых рынков.
 
 **Видение:** Та же архитектура. Та же агентная структура. Все рынки.
 
@@ -224,7 +224,7 @@ NOFX теперь поддерживает **три основные биржи*
 
 ## 🏗️ Техническая Архитектура
 
-NOFX построен на современной модульной архитектуре:
+GUANLAN построен на современной модульной архитектуре:
 
 - **Backend:** Go с фреймворком Gin, база данных SQLite
 - **Frontend:** React 18 + TypeScript + Vite + TailwindCSS
@@ -351,8 +351,8 @@ sudo apt-get install libta-lib0-dev
 ### 2. Клонирование проекта
 
 ```bash
-git clone https://github.com/tinkle-community/nofx.git
-cd nofx
+git clone #
+cd guanlan
 ```
 
 ### 3. Установка зависимостей
@@ -483,7 +483,7 @@ cp config.json.example config.json
 
 #### 🔷 Альтернатива: Использование биржи Hyperliquid
 
-**NOFX также поддерживает Hyperliquid** - децентрализованную биржу бессрочных фьючерсов. Чтобы использовать Hyperliquid вместо Binance:
+**GUANLAN также поддерживает Hyperliquid** - децентрализованную биржу бессрочных фьючерсов. Чтобы использовать Hyperliquid вместо Binance:
 
 **Шаг 1**: Получите приватный ключ Ethereum (для аутентификации Hyperliquid)
 
@@ -527,7 +527,7 @@ cp config.json.example config.json
 
 #### 🔶 Альтернатива: Использование биржи Aster DEX
 
-**NOFX также поддерживает Aster DEX** - децентрализованную биржу бессрочных фьючерсов, совместимую с Binance!
+**GUANLAN также поддерживает Aster DEX** - децентрализованную биржу бессрочных фьючерсов, совместимую с Binance!
 
 **Почему выбрать Aster?**
 - 🎯 API совместимый с Binance (легкая миграция)
@@ -776,10 +776,10 @@ cp config.json.example config.json
 
 ```bash
 # Соберите программу (первый запуск или после изменений кода)
-go build -o nofx
+go build -o guanlan
 
 # Запустите backend
-./nofx
+./guanlan
 ```
 
 **Вы должны увидеть:**
@@ -1089,7 +1089,7 @@ sudo apt-get install libta-lib0-dev
 ## 📬 Контакты
 
 - **Twitter/X**: [@Web3Tinkle](https://x.com/Web3Tinkle)
-- **GitHub Issues**: [Создать Issue](https://github.com/tinkle-community/nofx/issues)
+- **GitHub Issues**: [Создать Issue](#)
 
 ---
 
@@ -1128,4 +1128,4 @@ sudo apt-get install libta-lib0-dev
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=tinkle-community/nofx&type=Date)](https://star-history.com/#tinkle-community/nofx&Date)
+[![Star History Chart](#)](#)

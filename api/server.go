@@ -3,15 +3,16 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"guanlan/auth"
+	"guanlan/config"
+	"guanlan/crypto"
+	"guanlan/decision"
+	"guanlan/manager"
+	"guanlan/signals"
+	"guanlan/trader"
 	"log"
 	"net"
 	"net/http"
-	"nofx/auth"
-	"nofx/config"
-	"nofx/crypto"
-	"nofx/decision"
-	"nofx/manager"
-	"nofx/trader"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +89,8 @@ func (s *Server) setupRoutes() {
 
 		// 系统配置（无需认证，用于前端判断是否管理员模式/注册是否开启）
 		api.GET("/config", s.handleGetSystemConfig)
+		api.GET("/market/binance-futures-symbols", s.handleFuturesSymbols)
+		api.POST("/market/signals/preview", s.handleSignalPreview)
 
 		// 加密相关接口（无需认证）
 		api.GET("/crypto/public-key", s.cryptoHandler.HandleGetPublicKey)
@@ -123,6 +126,8 @@ func (s *Server) setupRoutes() {
 			// AI交易员管理
 			protected.GET("/my-traders", s.handleTraderList)
 			protected.GET("/traders/:id/config", s.handleGetTraderConfig)
+			protected.GET("/traders/:id/radar-pool", s.handleRadarPool)
+			protected.PATCH("/traders/:id/radar-pool", s.handleSetRadarPool)
 			protected.POST("/traders", s.handleCreateTrader)
 			protected.PUT("/traders/:id", s.handleUpdateTrader)
 			protected.DELETE("/traders/:id", s.handleDeleteTrader)
@@ -137,6 +142,7 @@ func (s *Server) setupRoutes() {
 
 			// 交易所配置
 			protected.GET("/exchanges", s.handleGetExchangeConfigs)
+			protected.GET("/exchanges/:id/credentials", s.handleExchangeCredentials)
 			protected.PUT("/exchanges", s.handleUpdateExchangeConfigs)
 
 			// 用户信号源配置
@@ -147,6 +153,8 @@ func (s *Server) setupRoutes() {
 			protected.GET("/status", s.handleStatus)
 			protected.GET("/account", s.handleAccount)
 			protected.GET("/positions", s.handlePositions)
+			protected.GET("/traders/:id/positions/stream", s.handlePositionStream)
+			protected.GET("/traders/:id/history", s.handleTradingHistory)
 			protected.GET("/decisions", s.handleDecisions)
 			protected.GET("/decisions/latest", s.handleLatestDecisions)
 			protected.GET("/statistics", s.handleStatistics)
@@ -361,20 +369,21 @@ func (s *Server) getTraderFromQuery(c *gin.Context) (*manager.TraderManager, str
 
 // AI交易员管理相关结构体
 type CreateTraderRequest struct {
-	Name                 string  `json:"name" binding:"required"`
-	AIModelID            string  `json:"ai_model_id" binding:"required"`
-	ExchangeID           string  `json:"exchange_id" binding:"required"`
-	InitialBalance       float64 `json:"initial_balance"`
-	ScanIntervalMinutes  int     `json:"scan_interval_minutes"`
-	BTCETHLeverage       int     `json:"btc_eth_leverage"`
-	AltcoinLeverage      int     `json:"altcoin_leverage"`
-	TradingSymbols       string  `json:"trading_symbols"`
-	CustomPrompt         string  `json:"custom_prompt"`
-	OverrideBasePrompt   bool    `json:"override_base_prompt"`
-	SystemPromptTemplate string  `json:"system_prompt_template"` // 系统提示词模板名称
-	IsCrossMargin        *bool   `json:"is_cross_margin"`        // 指针类型，nil表示使用默认值true
-	UseCoinPool          bool    `json:"use_coin_pool"`
-	UseOITop             bool    `json:"use_oi_top"`
+	SignalConfig         *signals.Config `json:"signal_config"`
+	Name                 string          `json:"name" binding:"required"`
+	AIModelID            string          `json:"ai_model_id" binding:"required"`
+	ExchangeID           string          `json:"exchange_id" binding:"required"`
+	InitialBalance       float64         `json:"initial_balance"`
+	ScanIntervalMinutes  int             `json:"scan_interval_minutes"`
+	BTCETHLeverage       int             `json:"btc_eth_leverage"`
+	AltcoinLeverage      int             `json:"altcoin_leverage"`
+	TradingSymbols       string          `json:"trading_symbols"`
+	CustomPrompt         string          `json:"custom_prompt"`
+	OverrideBasePrompt   bool            `json:"override_base_prompt"`
+	SystemPromptTemplate string          `json:"system_prompt_template"` // 系统提示词模板名称
+	IsCrossMargin        *bool           `json:"is_cross_margin"`        // 指针类型，nil表示使用默认值true
+	UseCoinPool          bool            `json:"use_coin_pool"`
+	UseOITop             bool            `json:"use_oi_top"`
 }
 
 type ModelConfig struct {
@@ -392,8 +401,8 @@ type SafeModelConfig struct {
 	Name            string `json:"name"`
 	Provider        string `json:"provider"`
 	Enabled         bool   `json:"enabled"`
-	CustomAPIURL    string `json:"customApiUrl"`        // 自定义API URL（通常不敏感）
-	CustomModelName string `json:"customModelName"`     // 自定义模型名（不敏感）
+	CustomAPIURL    string `json:"customApiUrl"`    // 自定义API URL（通常不敏感）
+	CustomModelName string `json:"customModelName"` // 自定义模型名（不敏感）
 }
 
 type ExchangeConfig struct {
@@ -414,8 +423,8 @@ type SafeExchangeConfig struct {
 	Enabled               bool   `json:"enabled"`
 	Testnet               bool   `json:"testnet,omitempty"`
 	HyperliquidWalletAddr string `json:"hyperliquidWalletAddr"` // Hyperliquid钱包地址（不敏感）
-	AsterUser             string `json:"asterUser"`              // Aster用户名（不敏感）
-	AsterSigner           string `json:"asterSigner"`            // Aster签名者（不敏感）
+	AsterUser             string `json:"asterUser"`             // Aster用户名（不敏感）
+	AsterSigner           string `json:"asterSigner"`           // Aster签名者（不敏感）
 }
 
 type UpdateModelConfigRequest struct {
@@ -447,6 +456,16 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if req.SignalConfig != nil {
+		if err := req.SignalConfig.Validate(); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if (req.SignalConfig.Enabled || req.SignalConfig.RadarEnabled) && req.ExchangeID != "binance" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "币安原生信号仅支持币安交易账户"})
+			return
+		}
 	}
 
 	// 校验杠杆值
@@ -512,8 +531,12 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 
 	// 设置扫描间隔默认值
 	scanIntervalMinutes := req.ScanIntervalMinutes
-	if scanIntervalMinutes < 3 {
-		scanIntervalMinutes = 3 // 默认3分钟，且不允许小于3
+	if scanIntervalMinutes == 0 {
+		scanIntervalMinutes = 3 // 未指定时默认3分钟
+	}
+	if scanIntervalMinutes < 1 || scanIntervalMinutes > 60 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "扫描间隔必须为1至60分钟"})
+		return
 	}
 
 	// ✨ 查询交易所实际余额，覆盖用户输入
@@ -594,6 +617,7 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		BTCETHLeverage:       btcEthLeverage,
 		AltcoinLeverage:      altcoinLeverage,
 		TradingSymbols:       req.TradingSymbols,
+		SignalConfig:         signalConfigJSON(req.SignalConfig),
 		UseCoinPool:          req.UseCoinPool,
 		UseOITop:             req.UseOITop,
 		CustomPrompt:         req.CustomPrompt,
@@ -630,17 +654,20 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 
 // UpdateTraderRequest 更新交易员请求
 type UpdateTraderRequest struct {
-	Name                string  `json:"name" binding:"required"`
-	AIModelID           string  `json:"ai_model_id" binding:"required"`
-	ExchangeID          string  `json:"exchange_id" binding:"required"`
-	InitialBalance      float64 `json:"initial_balance"`
-	ScanIntervalMinutes int     `json:"scan_interval_minutes"`
-	BTCETHLeverage      int     `json:"btc_eth_leverage"`
-	AltcoinLeverage     int     `json:"altcoin_leverage"`
-	TradingSymbols      string  `json:"trading_symbols"`
-	CustomPrompt        string  `json:"custom_prompt"`
-	OverrideBasePrompt  bool    `json:"override_base_prompt"`
-	IsCrossMargin       *bool   `json:"is_cross_margin"`
+	UseCoinPool         bool            `json:"use_coin_pool"`
+	UseOITop            bool            `json:"use_oi_top"`
+	SignalConfig        *signals.Config `json:"signal_config"`
+	Name                string          `json:"name" binding:"required"`
+	AIModelID           string          `json:"ai_model_id" binding:"required"`
+	ExchangeID          string          `json:"exchange_id" binding:"required"`
+	InitialBalance      float64         `json:"initial_balance"`
+	ScanIntervalMinutes int             `json:"scan_interval_minutes"`
+	BTCETHLeverage      int             `json:"btc_eth_leverage"`
+	AltcoinLeverage     int             `json:"altcoin_leverage"`
+	TradingSymbols      string          `json:"trading_symbols"`
+	CustomPrompt        string          `json:"custom_prompt"`
+	OverrideBasePrompt  bool            `json:"override_base_prompt"`
+	IsCrossMargin       *bool           `json:"is_cross_margin"`
 }
 
 // handleUpdateTrader 更新交易员配置
@@ -652,6 +679,16 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if req.SignalConfig != nil {
+		if err := req.SignalConfig.Validate(); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if (req.SignalConfig.Enabled || req.SignalConfig.RadarEnabled) && req.ExchangeID != "binance" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "币安原生信号仅支持币安交易账户"})
+			return
+		}
 	}
 
 	// 检查交易员是否存在且属于当前用户
@@ -692,10 +729,12 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 
 	// 设置扫描间隔，允许更新
 	scanIntervalMinutes := req.ScanIntervalMinutes
-	if scanIntervalMinutes <= 0 {
+	if scanIntervalMinutes == 0 {
 		scanIntervalMinutes = existingTrader.ScanIntervalMinutes // 保持原值
-	} else if scanIntervalMinutes < 3 {
-		scanIntervalMinutes = 3
+	}
+	if scanIntervalMinutes < 1 || scanIntervalMinutes > 60 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "扫描间隔必须为1至60分钟"})
+		return
 	}
 
 	// 更新交易员配置
@@ -709,6 +748,9 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		BTCETHLeverage:       btcEthLeverage,
 		AltcoinLeverage:      altcoinLeverage,
 		TradingSymbols:       req.TradingSymbols,
+		SignalConfig:         signalConfigJSON(req.SignalConfig),
+		UseCoinPool:          req.UseCoinPool,
+		UseOITop:             req.UseOITop,
 		CustomPrompt:         req.CustomPrompt,
 		OverrideBasePrompt:   req.OverrideBasePrompt,
 		SystemPromptTemplate: existingTrader.SystemPromptTemplate, // 保持原值
@@ -717,11 +759,27 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		IsRunning:            existingTrader.IsRunning, // 保持原值
 	}
 
+	if req.SignalConfig == nil {
+		trader.SignalConfig = existingTrader.SignalConfig
+	}
+	if cfg, err := signals.Parse(trader.SignalConfig); err != nil || ((cfg.Enabled || cfg.RadarEnabled) && req.ExchangeID != "binance") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请关闭币安信号后再切换其他交易所"})
+		return
+	}
 	// 更新数据库
 	err = s.database.UpdateTrader(trader)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新交易员失败: %v", err)})
 		return
+	}
+
+	if live, liveErr := s.traderManager.GetTrader(traderID); liveErr == nil {
+		cfg, _ := signals.Parse(trader.SignalConfig)
+		live.SetRadarEnabled(cfg.RadarEnabled)
+		if err := live.SetScanInterval(time.Duration(scanIntervalMinutes) * time.Minute); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "配置已保存，但扫描间隔应用失败"})
+			return
+		}
 	}
 
 	// 重新加载交易员到内存
@@ -745,6 +803,11 @@ func (s *Server) handleDeleteTrader(c *gin.Context) {
 	userID := c.GetString("user_id")
 	traderID := c.Param("id")
 
+	// Verify ownership before touching an in-memory instance.
+	if _, _, _, err := s.database.GetTraderConfig(userID, traderID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "交易员不存在或无权访问"})
+		return
+	}
 	// 从数据库删除
 	err := s.database.DeleteTrader(userID, traderID)
 	if err != nil {
@@ -752,14 +815,7 @@ func (s *Server) handleDeleteTrader(c *gin.Context) {
 		return
 	}
 
-	// 如果交易员正在运行，先停止它
-	if trader, err := s.traderManager.GetTrader(traderID); err == nil {
-		status := trader.GetStatus()
-		if isRunning, ok := status["is_running"].(bool); ok && isRunning {
-			trader.Stop()
-			log.Printf("⏹  已停止运行中的交易员: %s", traderID)
-		}
-	}
+	s.traderManager.RemoveTrader(traderID)
 
 	log.Printf("✓ 交易员已删除: %s", traderID)
 	c.JSON(http.StatusOK, gin.H{"message": "交易员已删除"})
@@ -1293,6 +1349,7 @@ func (s *Server) handleGetTraderConfig(c *gin.Context) {
 		"btc_eth_leverage":      traderConfig.BTCETHLeverage,
 		"altcoin_leverage":      traderConfig.AltcoinLeverage,
 		"trading_symbols":       traderConfig.TradingSymbols,
+		"signal_config":         decodeSignalConfig(traderConfig.SignalConfig),
 		"custom_prompt":         traderConfig.CustomPrompt,
 		"override_base_prompt":  traderConfig.OverrideBasePrompt,
 		"is_cross_margin":       traderConfig.IsCrossMargin,
@@ -1363,20 +1420,22 @@ func (s *Server) handlePositions(c *gin.Context) {
 		return
 	}
 
-	trader, err := s.traderManager.GetTrader(traderID)
+	liveTrader, err := s.traderManager.GetTrader(traderID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
-	positions, err := trader.GetPositions()
+	positions, observedAt, err := liveTrader.GetPositionsSnapshot()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("获取持仓列表失败: %v", err),
+			"error": trader.BinanceReadErrorMessage(err),
 		})
 		return
 	}
 
+	c.Header("Cache-Control", "no-store")
+	c.Header("X-Positions-As-Of", strconv.FormatInt(observedAt.UnixMilli(), 10))
 	c.JSON(http.StatusOK, positions)
 }
 
@@ -1637,7 +1696,6 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
 
 // handleLogout 将当前token加入黑名单
 func (s *Server) handleLogout(c *gin.Context) {
@@ -1994,8 +2052,8 @@ func (s *Server) handleGetSupportedExchanges(c *gin.Context) {
 
 // Start 启动服务器
 func (s *Server) Start() error {
-	addr := fmt.Sprintf(":%d", s.port)
-	log.Printf("🌐 API服务器启动在 http://localhost%s", addr)
+	addr := fmt.Sprintf("127.0.0.1:%d", s.port)
+	log.Printf("🌐 API服务器启动在 http://%s", addr)
 	log.Printf("📊 API文档:")
 	log.Printf("  • GET  /api/health           - 健康检查")
 	log.Printf("  • GET  /api/traders          - 公开的AI交易员排行榜前50名（无需认证）")

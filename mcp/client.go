@@ -115,7 +115,7 @@ func (client *Client) SetCustomAPI(apiURL, apiKey, modelName string) {
 		client.BaseURL = strings.TrimSuffix(apiURL, "#")
 		client.UseFullURL = true
 	} else {
-		client.BaseURL = apiURL
+		client.BaseURL = strings.TrimRight(strings.TrimSpace(apiURL), "/")
 		client.UseFullURL = false
 	}
 

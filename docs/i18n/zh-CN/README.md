@@ -1,4 +1,4 @@
-# 🤖 NOFX - AI交易操作系统
+# 🤖 GUANLAN - AI交易操作系统
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![React](https://img.shields.io/badge/React-18+-61DAFB?style=flat&logo=react)](https://reactjs.org/)
@@ -8,7 +8,7 @@
 
 **语言 / Languages:** [English](../../../README.md) | [中文](../zh-CN/README.md) | [Українська](../uk/README.md) | [Русский](../ru/README.md) | [日本語](../ja/README.md)
 
-**官方推特:** [@nofx_ai](https://x.com/nofx_ai)
+**官方推特:** [@guanlan_ai](#)
 
 **📚 文档中心:** [文档首页](../../README.md) | [快速开始](../../getting-started/README.zh-CN.md) | [更新日志](../../../CHANGELOG.zh-CN.md) | [社区指南](../../community/README.md)
 
@@ -42,7 +42,7 @@
 
 ## 🚀 通用AI交易操作系统
 
-**NOFX** 是通用架构的 **AI交易操作系统（Agentic Trading OS）**。我们已在加密市场打通"**多智能体决策 → 统一风控 → 低延迟执行 → 真实/纸面账户复盘**"的闭环，正按同一技术栈扩展到**股票、期货、期权、外汇等所有市场**。
+**GUANLAN** 是通用架构的 **AI交易操作系统（Agentic Trading OS）**。我们已在加密市场打通"**多智能体决策 → 统一风控 → 低延迟执行 → 真实/纸面账户复盘**"的闭环，正按同一技术栈扩展到**股票、期货、期权、外汇等所有市场**。
 
 ### 🎯 核心特性
 
@@ -63,7 +63,7 @@
 
 **投资咨询**，请通过 Twitter 私信联系 **Tinkle** 或 **Zack**。
 
-**商务合作**，请私信官方推特 [@nofx_ai](https://x.com/nofx_ai)。
+**商务合作**，请私信官方推特 [@guanlan_ai](#)。
 
 ---
 
@@ -73,7 +73,7 @@
 
 加入我们的Telegram开发者社区，讨论、分享想法并获得支持：
 
-**💬 [NOFX开发者社区](https://t.me/nofx_dev_community)**
+**💬 [GUANLAN开发者社区](#)**
 
 ---
 
@@ -81,7 +81,7 @@
 
 ### 🚀 多交易所支持！
 
-NOFX现已支持**三大交易所**：Binance、Hyperliquid和Aster DEX！
+GUANLAN现已支持**三大交易所**：Binance、Hyperliquid和Aster DEX！
 
 #### **Hyperliquid交易所**
 
@@ -149,7 +149,7 @@ NOFX现已支持**三大交易所**：Binance、Hyperliquid和Aster DEX！
 
 ## ✨ 当前实现 - 加密货币市场
 
-NOFX 目前已在**加密货币市场全面运行**，具备以下经过验证的能力：
+GUANLAN 目前已在**加密货币市场全面运行**，具备以下经过验证的能力：
 
 ### 🏆 多智能体竞赛框架
 - **实时智能体对战**：Qwen vs DeepSeek 模型实时交易竞赛
@@ -197,7 +197,7 @@ NOFX 目前已在**加密货币市场全面运行**，具备以下经过验证�
 
 ## 🔮 路线图 - 通用市场扩展
 
-NOFX 的使命是成为所有金融市场的**通用 AI 交易操作系统**。
+GUANLAN 的使命是成为所有金融市场的**通用 AI 交易操作系统**。
 
 **愿景：** 相同架构。相同智能体框架。所有市场。
 
@@ -222,7 +222,7 @@ NOFX 的使命是成为所有金融市场的**通用 AI 交易操作系统**。
 
 ## 🏗️ 技术架构
 
-NOFX 采用现代化的模块化架构：
+GUANLAN 采用现代化的模块化架构：
 
 - **后端：** Go + Gin 框架，SQLite 数据库
 - **前端：** React 18 + TypeScript + Vite + TailwindCSS
@@ -351,7 +351,7 @@ sudo apt-get install libta-lib0-dev
 
 ```bash
 git clone <repository-url>
-cd nofx
+cd guanlan
 ```
 
 ### 3. 安装依赖
@@ -484,7 +484,7 @@ cp config.json.example config.json
 
 #### 🔷 备选：使用Hyperliquid交易所
 
-**NOFX也支持Hyperliquid** - 去中心化永续期货交易所。使用Hyperliquid而非Binance：
+**GUANLAN也支持Hyperliquid** - 去中心化永续期货交易所。使用Hyperliquid而非Binance：
 
 **步骤1**：获取以太坊私钥（用于Hyperliquid身份验证）
 
@@ -528,7 +528,7 @@ cp config.json.example config.json
 
 #### 🔶 备选：使用Aster DEX交易所
 
-**NOFX也支持Aster DEX** - 兼容Binance的去中心化永续期货交易所！
+**GUANLAN也支持Aster DEX** - 兼容Binance的去中心化永续期货交易所！
 
 **为什么选择Aster？**
 - 🎯 兼容Binance API（轻松迁移）
@@ -777,10 +777,10 @@ cp config.json.example config.json
 
 ```bash
 # 构建程序（首次运行或代码更改后）
-go build -o nofx
+go build -o guanlan
 
 # 启动后端
-./nofx
+./guanlan
 ```
 
 **您应该看到：**
@@ -1292,8 +1292,8 @@ sudo apt-get install libta-lib0-dev
 ## 📬 联系方式
 
 ### 🐛 技术支持
-- **GitHub Issues**: [提交Issue](https://github.com/tinkle-community/nofx/issues)
-- **开发者社区**: [Telegram群组](https://t.me/nofx_dev_community)
+- **GitHub Issues**: [提交Issue](#)
+- **开发者社区**: [Telegram群组](#)
 
 ---
 
@@ -1315,4 +1315,4 @@ sudo apt-get install libta-lib0-dev
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=tinkle-community/nofx&type=Date)](https://star-history.com/#tinkle-community/nofx&Date)
+[![Star History Chart](#)](#)

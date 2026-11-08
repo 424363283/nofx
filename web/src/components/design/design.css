@@ -1,0 +1,281 @@
+.ant-app {
+  min-height: 100dvh;
+}
+.ant-desk-header {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 40;
+  background: #10191df5;
+  border-bottom: 1px solid #27383f;
+}
+.ant-desk-header-inner {
+  height: 72px;
+  max-width: 1600px;
+  margin: auto;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+.ant-desk-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.ant-desk-menu {
+  flex: 1;
+  min-width: 0;
+  background: transparent !important;
+  border-bottom: 0 !important;
+}
+.ant-desk-mobile-toggle {
+  display: none;
+}
+.ant-desk-actions {
+  flex-shrink: 0;
+}
+.ant-btn {
+  font-weight: 500;
+  box-shadow: none;
+}
+.ant-btn svg {
+  flex-shrink: 0;
+}
+.ant-form-item {
+  margin-bottom: 20px;
+}
+.ant-card {
+  box-shadow: none;
+}
+.ant-card .ant-card {
+  background: #10191d;
+}
+.ant-modal .ant-card {
+  background: #10191d;
+}
+.ant-select {
+  max-width: 100%;
+}
+.ant-collapse {
+  margin-bottom: 12px;
+}
+.ant-modal .desk-dialog-header {
+  padding: 0 36px 20px 0;
+  background: transparent;
+  border: 0;
+}
+.ant-modal .desk-dialog-body {
+  padding: 0;
+  max-height: 60vh;
+  overflow: auto;
+}
+.ant-modal .desk-dialog-footer {
+  padding: 20px 0 0;
+  background: transparent;
+}
+.ant-modal .ant-modal-body > div {
+  max-width: none;
+}
+.ant-desk-page-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.ant-desk-page-title h1 {
+  margin: 0 !important;
+}
+.ant-desk-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.ant-desk-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.ant-desk-filters > .ant-select {
+  min-width: 160px;
+}
+.ant-desk-filters > .ant-input-affix-wrapper {
+  flex: 1;
+  min-width: 220px;
+}
+.ant-desk-description {
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+.ant-desk-radar-table .ant-table-cell {
+  vertical-align: top;
+}
+.ant-desk-radar-table .ant-tag {
+  margin: 2px 4px 2px 0;
+}
+.ant-desk-auth .ant-card {
+  width: 100%;
+}
+.ant-desk-auth label {
+  font-weight: 500;
+  font-size: 13px;
+}
+.ant-desk-auth .ant-input,
+.ant-desk-auth .ant-input-affix-wrapper {
+  min-height: 40px;
+}
+@media (max-width: 1100px) {
+  .ant-desk-menu,
+  .ant-desk-actions {
+    display: none;
+  }
+  .ant-desk-mobile-toggle {
+    display: inline-flex;
+    margin-left: auto;
+  }
+  .ant-desk-header-inner {
+    height: 64px;
+    padding: 0 20px;
+  }
+}
+@media (max-width: 767px) {
+  .ant-desk-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ant-desk-header-inner {
+    padding: 0 16px;
+  }
+  .ant-card .ant-card-body {
+    padding: 16px;
+  }
+  .ant-modal .desk-dialog-body {
+    max-height: 65dvh;
+  }
+  .ant-desk-page-title {
+    align-items: flex-start;
+  }
+  .ant-desk-page-title h1 {
+    font-size: 24px;
+  }
+  .ant-desk-filters > .ant-select {
+    flex: 1;
+    min-width: 140px;
+  }
+}
+
+/* Radar: quiet surfaces, readable semantic colors and aligned market figures. */
+.radar-workspace {
+  --radar-positive: var(--color-positive);
+  --radar-negative: #fda4af;
+}
+.radar-workspace .ant-desk-radar-table .ant-table {
+  background: transparent;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.radar-workspace .ant-table-thead > tr > th {
+  background: #182328;
+  color: #93a6ad;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 15px 16px;
+  border-bottom: 1px solid #ffffff0d;
+}
+.radar-workspace .ant-table-thead > tr > th::before {
+  display: none !important;
+}
+.radar-workspace .ant-table-tbody > tr > td {
+  padding: 19px 16px;
+  border-bottom: 1px solid #ffffff0a;
+  vertical-align: middle;
+  color: #d7e2e5;
+}
+.radar-workspace .ant-table-tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+.radar-workspace .ant-table-tbody > tr > .ant-table-cell-row-hover {
+  background: #1b292e;
+}
+.radar-workspace .ant-table-cell .ant-typography-success {
+  color: var(--radar-positive);
+}
+.radar-workspace .ant-table-cell .ant-typography-danger {
+  color: var(--radar-negative);
+}
+.radar-bias {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #a4b4ba;
+}
+.radar-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.radar-workspace .radar-tone-bull {
+  color: var(--radar-positive);
+}
+.radar-workspace .radar-tone-bear {
+  color: var(--radar-negative);
+}
+.radar-workspace .radar-tone-mixed {
+  color: #e9ca87;
+}
+.radar-macd {
+  font-size: 12px;
+  color: #9aadb4;
+  white-space: nowrap;
+}
+.radar-workspace .ant-tag.radar-signal {
+  margin: 0;
+  border: 0;
+  border-radius: 5px;
+  background: #ffffff06;
+  color: #adbdc3;
+  font-size: 12px;
+  line-height: 24px;
+  padding: 0 8px;
+}
+.radar-workspace .ant-tag.radar-tone-bull {
+  background: #6ee7b70c;
+  color: #8ed8bc;
+}
+.radar-workspace .ant-tag.radar-tone-bear {
+  background: #fda4af0c;
+  color: #e8aab3;
+}
+.radar-workspace .radar-expand {
+  color: #80969f;
+  width: 24px;
+  height: 28px;
+  min-width: 24px;
+}
+.radar-workspace .radar-expand .anticon {
+  font-size: 10px;
+}
+.radar-workspace .ant-table-expanded-row > td {
+  background: #10191d;
+  padding: 24px 32px;
+}
+.radar-workspace .radar-bias {
+  background: transparent;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Share the same emerald hue for semantic tags in cards and tables. */
+.ant-tag.ant-tag-success,
+.ant-tag.ant-tag-green {
+  color: var(--color-positive);
+  background: var(--color-positive-bg);
+  border-color: var(--color-positive-border);
+}
