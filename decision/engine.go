@@ -14,13 +14,6 @@ import (
 
 // 预编译正则表达式（性能优化：避免每次调用时重新编译）
 var (
-	// ✅ 安全的正則：精確匹配 ```json 代碼塊
-	// 使用反引號 + 拼接避免轉義問題
-	reJSONFence      = regexp.MustCompile(`(?is)` + "```json\\s*(\\[\\s*\\{.*?\\}\\s*\\])\\s*```")
-	reJSONArray      = regexp.MustCompile(`(?is)\[\s*\{.*?\}\s*\]`)
-	reArrayHead      = regexp.MustCompile(`^\[\s*\{`)
-	reArrayOpenSpace = regexp.MustCompile(`^\[\s+\{`)
-	reInvisibleRunes = regexp.MustCompile("[\u200B\u200C\u200D\uFEFF]")
 
 	// 新增：XML标签提取（支持思维链中包含任何字符）
 	reReasoningTag = regexp.MustCompile(`(?s)<reasoning>(.*?)</reasoning>`)
@@ -115,6 +108,7 @@ type Decision struct {
 
 // FullDecision AI的完整决策（包含思维链）
 type FullDecision struct {
+	RawResponse  string     `json:"raw_response,omitempty"`
 	SystemPrompt string     `json:"system_prompt"` // 系统提示词（发送给AI的系统prompt）
 	UserPrompt   string     `json:"user_prompt"`   // 发送给AI的输入prompt
 	CoTTrace     string     `json:"cot_trace"`     // 思维链分析（AI输出）
@@ -137,6 +131,7 @@ func GetFullDecisionWithCustomPrompt(ctx *Context, mcpClient *mcp.Client, custom
 	// 2. 构建 System Prompt（固定规则）和 User Prompt（动态数据）
 	systemPrompt := buildSystemPromptWithCustom(ctx.Account.TotalEquity, ctx.BTCETHLeverage, ctx.AltcoinLeverage, customPrompt, overrideBase, templateName)
 	systemPrompt += "\n\n# 信号分析与执行分离（优先遵守）\n必须逐个分析行情、趋势、结构与入场形态，不检查账户是否有钱。合格信号输出open_long/open_short及止损止盈，position_size_usd=0、risk_usd=0留给执行层；没有合格信号才wait。资金不足、最小下单额及实际风险预算问题由执行层记录为开仓失败，不是观望理由。不得虚构分析资金或假设已有资金。已有持仓仍需管理。\n"
+	systemPrompt += technicalAnalysisInstructions
 	userPrompt := buildUserPrompt(ctx)
 
 	// 3. 调用AI API（使用 system + user prompt）
@@ -147,13 +142,16 @@ func GetFullDecisionWithCustomPrompt(ctx *Context, mcpClient *mcp.Client, custom
 
 	// 4. 解析AI响应
 	decision, err := parseFullDecisionResponse(aiResponse, ctx.Account.TotalEquity, ctx.BTCETHLeverage, ctx.AltcoinLeverage)
+	if decision != nil {
+		decision.Timestamp = time.Now()
+		decision.SystemPrompt = systemPrompt
+		decision.UserPrompt = userPrompt
+		decision.RawResponse = aiResponse
+	}
 	if err != nil {
 		return decision, fmt.Errorf("解析AI响应失败: %w", err)
 	}
 
-	decision.Timestamp = time.Now()
-	decision.SystemPrompt = systemPrompt // 保存系统prompt
-	decision.UserPrompt = userPrompt     // 保存输入prompt
 	return decision, nil
 }
 
@@ -322,7 +320,7 @@ func buildSystemPrompt(accountEquity float64, btcEthLeverage, altcoinLeverage in
 
 	// 2. 硬约束（风险控制）- 动态生成
 	sb.WriteString("# 硬约束（风险控制）\n\n")
-	sb.WriteString("1. 风险回报比: 必须 ≥ 1:3（冒1%风险，赚3%+收益）\n")
+	sb.WriteString(fmt.Sprintf("1. 毛收益/风险至少%.2g:1；往返成本预算为报价×%.2f%%，(收益-成本)/(风险+成本)至少%.2g:1，由执行层复核。\n", MinEntryRewardRisk, EntryCostRate*100, MinEntryNetRewardRisk))
 	sb.WriteString("2. 最多持仓: 3个币种（质量>数量）\n")
 	if template != nil && template.Name == "default" {
 		sb.WriteString("3. 默认策略采用更严格限额：单笔风险预算≤净值0.5%，单币名义≤净值，最多3个持仓，每轮最多1笔新开仓；按止损距离与成本反推仓位，不设必须用满的最低比例。\n")
@@ -357,7 +355,7 @@ func buildSystemPrompt(accountEquity float64, btcEthLeverage, altcoinLeverage in
 	sb.WriteString("</decision>\n\n")
 	sb.WriteString("## 字段说明\n\n")
 	sb.WriteString("- `action`: open_long | open_short | close_long | close_short | hold | wait\n")
-	sb.WriteString("- `confidence`: 0-100（开仓建议≥75）\n")
+	sb.WriteString("- `confidence`: 0-100（仅描述模型判断，不是胜率，也不是额外开仓门槛）\n")
 	sb.WriteString("- 开仓信号必填: leverage, stop_loss, take_profit, confidence, reasoning；position_size_usd与risk_usd填0，表示由执行层按真实资金计算；risk_budget_pct只可为0.25或0.5，未提供按0.25\n\n")
 
 	return sb.String()
@@ -533,145 +531,73 @@ func extractCoTTrace(response string) string {
 	return strings.TrimSpace(response)
 }
 
-// extractDecisions 提取JSON决策列表
+// extractDecisions uses JSON's string-aware parser, never punctuation regexes.
 func extractDecisions(response string) ([]Decision, error) {
-	// 预清洗：去零宽/BOM
-	s := removeInvisibleRunes(response)
-	s = strings.TrimSpace(s)
-
-	// 🔧 关键修复 (Critical Fix)：在正则匹配之前就先修复全角字符！
-	// 否则正则表达式 \[ 无法匹配全角的 ［
-	s = fixMissingQuotes(s)
-
-	// 方法1: 优先尝试从 <decision> 标签中提取
-	var jsonPart string
-	if match := reDecisionTag.FindStringSubmatch(s); match != nil && len(match) > 1 {
-		jsonPart = strings.TrimSpace(match[1])
-		log.Printf("✓ 使用 <decision> 标签提取JSON")
-	} else {
-		// 后备方案：使用整个响应
-		jsonPart = s
-		log.Printf("⚠️  未找到 <decision> 标签，使用全文搜索JSON")
+	part := strings.TrimSpace(response)
+	explicit := false
+	if match := reDecisionTag.FindStringSubmatch(part); len(match) > 1 {
+		part = strings.TrimSpace(match[1])
+		explicit = true
+	}
+	if strings.HasPrefix(part, "```") {
+		part = strings.TrimSpace(part[3:])
+		if strings.HasPrefix(strings.ToLower(part), "json") {
+			part = strings.TrimSpace(part[4:])
+		}
+		if !strings.HasSuffix(part, "```") {
+			return nil, fmt.Errorf("JSON代码块未闭合，本轮不执行交易")
+		}
+		part = strings.TrimSpace(part[:len(part)-3])
+		explicit = true
 	}
 
-	// 修复 jsonPart 中的全角字符
-	jsonPart = fixMissingQuotes(jsonPart)
-
-	// 1) 优先从 ```json 代码块中提取
-	if m := reJSONFence.FindStringSubmatch(jsonPart); m != nil && len(m) > 1 {
-		jsonContent := strings.TrimSpace(m[1])
-		jsonContent = compactArrayOpen(jsonContent) // 把 "[ {" 规整为 "[{"
-		jsonContent = fixMissingQuotes(jsonContent) // 二次修复（防止 regex 提取后还有残留全角）
-		if err := validateJSONFormat(jsonContent); err != nil {
-			return nil, fmt.Errorf("JSON格式验证失败: %w\nJSON内容: %s\n完整响应:\n%s", err, jsonContent, response)
-		}
-		var decisions []Decision
-		if err := json.Unmarshal([]byte(jsonContent), &decisions); err != nil {
-			return nil, fmt.Errorf("JSON解析失败: %w\nJSON内容: %s", err, jsonContent)
-		}
-		return decisions, nil
+	part = strings.TrimPrefix(part, "\ufeff")
+	if strings.HasPrefix(part, "[") {
+		explicit = true
 	}
-
-	// 2) 退而求其次 (Fallback)：全文寻找首个对象数组
-	// 注意：此时 jsonPart 已经过 fixMissingQuotes()，全角字符已转换为半角
-	jsonContent := strings.TrimSpace(reJSONArray.FindString(jsonPart))
-	if jsonContent == "" {
-		// 🔧 安全回退 (Safe Fallback)：当AI只输出思维链没有JSON时，生成保底决策（避免系统崩溃）
-		log.Printf("⚠️  [SafeFallback] AI未输出JSON决策，进入安全等待模式 (AI response without JSON, entering safe wait mode)")
-
-		// 提取思维链摘要（最多 240 字符）
-		cotSummary := jsonPart
-		if len(cotSummary) > 240 {
-			cotSummary = cotSummary[:240] + "..."
-		}
-
-		// 生成保底决策：所有币种进入 wait 状态
-		fallbackDecision := Decision{
-			Symbol:    "ALL",
-			Action:    "wait",
-			Reasoning: fmt.Sprintf("模型未输出结构化JSON决策，进入安全等待；摘要：%s", cotSummary),
-		}
-
-		return []Decision{fallbackDecision}, nil
+	start := strings.Index(part, "[")
+	if start < 0 {
+		return nil, fmt.Errorf("模型未返回JSON决策数组，本轮不执行交易")
 	}
-
-	// 🔧 规整格式（此时全角字符已在前面修复过）
-	jsonContent = compactArrayOpen(jsonContent)
-	jsonContent = fixMissingQuotes(jsonContent) // 二次修复（防止 regex 提取后还有残留全角）
-
-	// 🔧 验证 JSON 格式（检测常见错误）
-	if err := validateJSONFormat(jsonContent); err != nil {
-		return nil, fmt.Errorf("JSON格式验证失败: %w\nJSON内容: %s\n完整响应:\n%s", err, jsonContent, response)
+	if explicit && strings.TrimSpace(part[:start]) != "" {
+		return nil, fmt.Errorf("决策区包含JSON数组以外的内容")
 	}
-
-	// 解析JSON
+	decoder := json.NewDecoder(strings.NewReader(part[start:]))
+	var raw json.RawMessage
+	if err := decoder.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("决策JSON语法错误: %w", err)
+	}
+	if explicit && strings.TrimSpace(part[start+int(decoder.InputOffset()):]) != "" {
+		return nil, fmt.Errorf("决策数组之后包含额外内容，本轮不执行交易")
+	}
+	if err := validateJSONFormat(string(raw)); err != nil {
+		return nil, err
+	}
 	var decisions []Decision
-	if err := json.Unmarshal([]byte(jsonContent), &decisions); err != nil {
-		return nil, fmt.Errorf("JSON解析失败: %w\nJSON内容: %s", err, jsonContent)
+	if err := json.Unmarshal(raw, &decisions); err != nil {
+		return nil, fmt.Errorf("决策字段类型错误: %w", err)
 	}
-
+	if decisions == nil {
+		decisions = []Decision{}
+	}
 	return decisions, nil
 }
 
-// fixMissingQuotes 替换中文引号和全角字符为英文引号和半角字符（避免AI输出全角JSON字符导致解析失败）
-func fixMissingQuotes(jsonStr string) string {
-	// 替换中文引号
-	jsonStr = strings.ReplaceAll(jsonStr, "\u201c", "\"") // "
-	jsonStr = strings.ReplaceAll(jsonStr, "\u201d", "\"") // "
-	jsonStr = strings.ReplaceAll(jsonStr, "\u2018", "'")  // '
-	jsonStr = strings.ReplaceAll(jsonStr, "\u2019", "'")  // '
-
-	// ⚠️ 替换全角括号、冒号、逗号（防止AI输出全角JSON字符）
-	jsonStr = strings.ReplaceAll(jsonStr, "［", "[") // U+FF3B 全角左方括号
-	jsonStr = strings.ReplaceAll(jsonStr, "］", "]") // U+FF3D 全角右方括号
-	jsonStr = strings.ReplaceAll(jsonStr, "｛", "{") // U+FF5B 全角左花括号
-	jsonStr = strings.ReplaceAll(jsonStr, "｝", "}") // U+FF5D 全角右花括号
-	jsonStr = strings.ReplaceAll(jsonStr, "：", ":") // U+FF1A 全角冒号
-	jsonStr = strings.ReplaceAll(jsonStr, "，", ",") // U+FF0C 全角逗号
-
-	// ⚠️ 替换CJK标点符号（AI在中文上下文中也可能输出这些）
-	jsonStr = strings.ReplaceAll(jsonStr, "【", "[") // CJK左方头括号 U+3010
-	jsonStr = strings.ReplaceAll(jsonStr, "】", "]") // CJK右方头括号 U+3011
-	jsonStr = strings.ReplaceAll(jsonStr, "〔", "[") // CJK左龟壳括号 U+3014
-	jsonStr = strings.ReplaceAll(jsonStr, "〕", "]") // CJK右龟壳括号 U+3015
-	jsonStr = strings.ReplaceAll(jsonStr, "、", ",") // CJK顿号 U+3001
-
-	// ⚠️ 替换全角空格为半角空格（JSON中不应该有全角空格）
-	jsonStr = strings.ReplaceAll(jsonStr, "　", " ") // U+3000 全角空格
-
-	return jsonStr
-}
-
-// validateJSONFormat 验证 JSON 格式，检测常见错误
-func validateJSONFormat(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-
-	// 允许 [ 和 { 之间存在任意空白（含零宽）
-	if !reArrayHead.MatchString(trimmed) {
-		// 检查是否是纯数字/范围数组（常见错误）
-		if strings.HasPrefix(trimmed, "[") && !strings.Contains(trimmed[:min(20, len(trimmed))], "{") {
-			return fmt.Errorf("不是有效的决策数组（必须包含对象 {}），实际内容: %s", trimmed[:min(50, len(trimmed))])
-		}
-		return fmt.Errorf("JSON 必须以 [{ 开头（允许空白），实际: %s", trimmed[:min(20, len(trimmed))])
+// Quoted strings may contain commas, ranges, quotes and brackets. Only actual
+// JSON syntax and array element types are validated; do not rewrite model text.
+func validateJSONFormat(raw string) error {
+	var records []json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &records); err != nil {
+		return fmt.Errorf("决策JSON语法错误: %w", err)
 	}
-
-	// 检查是否包含范围符号 ~（LLM 常见错误）
-	if strings.Contains(jsonStr, "~") {
-		return fmt.Errorf("JSON 中不可包含范围符号 ~，所有数字必须是精确的单一值")
+	if !strings.HasPrefix(strings.TrimSpace(raw), "[") {
+		return fmt.Errorf("决策必须是JSON数组")
 	}
-
-	// 检查是否包含千位分隔符（如 98,000）
-	// 使用简单的模式匹配：数字+逗号+3位数字
-	for i := 0; i < len(jsonStr)-4; i++ {
-		if jsonStr[i] >= '0' && jsonStr[i] <= '9' &&
-			jsonStr[i+1] == ',' &&
-			jsonStr[i+2] >= '0' && jsonStr[i+2] <= '9' &&
-			jsonStr[i+3] >= '0' && jsonStr[i+3] <= '9' &&
-			jsonStr[i+4] >= '0' && jsonStr[i+4] <= '9' {
-			return fmt.Errorf("JSON 数字不可包含千位分隔符逗号，发现: %s", jsonStr[i:min(i+10, len(jsonStr))])
+	for i, record := range records {
+		if !strings.HasPrefix(strings.TrimSpace(string(record)), "{") {
+			return fmt.Errorf("决策第%d项必须为JSON对象", i+1)
 		}
 	}
-
 	return nil
 }
 
@@ -681,16 +607,6 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// removeInvisibleRunes 去除零宽字符和 BOM，避免肉眼看不见的前缀破坏校验
-func removeInvisibleRunes(s string) string {
-	return reInvisibleRunes.ReplaceAllString(s, "")
-}
-
-// compactArrayOpen 规整开头的 "[ {" → "[{"
-func compactArrayOpen(s string) string {
-	return reArrayOpenSpace.ReplaceAllString(strings.TrimSpace(s), "[{")
 }
 
 // validateDecisions 验证所有决策（需要账户信息和杠杆配置）

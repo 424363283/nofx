@@ -33,7 +33,7 @@ func calculateSignalEntrySize(d *decision.Decision, price, equity, available, us
 		return 0, fmt.Errorf("开仓失败：单笔风险预算仅支持0.25%%或0.5%%")
 	}
 	distance := math.Abs(price-d.StopLoss) / price
-	const cost = 0.002
+	const cost = decision.EntryCostRate
 	riskBudget := equity * pct / 100
 	remaining := math.Max(0, equity*0.3-usedMargin)
 	nominal := math.Min(riskBudget/(distance+cost), math.Min(equity, math.Min(remaining*float64(d.Leverage), available*0.8*float64(d.Leverage))))
@@ -88,6 +88,6 @@ func (at *AutoTrader) sizeSignalEntry(d *decision.Decision, price float64, posit
 		return err
 	}
 	d.PositionSizeUSD = size
-	d.RiskUSD = size * (math.Abs(price-d.StopLoss)/price + 0.002)
+	d.RiskUSD = size * (math.Abs(price-d.StopLoss)/price + decision.EntryCostRate)
 	return nil
 }

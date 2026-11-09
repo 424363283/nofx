@@ -515,6 +515,7 @@ func (at *AutoTrader) runCycle() error {
 
 	// 即使有错误，也保存思维链、决策和输入prompt（用于debug）
 	if decision != nil {
+		record.RawResponse = decision.RawResponse
 		record.SystemPrompt = decision.SystemPrompt // 保存系统提示词
 		record.InputPrompt = decision.UserPrompt
 		record.CoTTrace = decision.CoTTrace

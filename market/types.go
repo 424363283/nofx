@@ -4,6 +4,7 @@ import "time"
 
 // Data 市场数据结构
 type Data struct {
+	Technical         []TechnicalReport
 	Symbol            string
 	CurrentPrice      float64
 	PriceChange1h     float64 // 1小时价格变化百分比

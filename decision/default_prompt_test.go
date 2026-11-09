@@ -45,3 +45,23 @@ func TestUserPromptTimeZones(t *testing.T) {
 		}
 	}
 }
+
+func TestActiveStrategyHasAlternativeEntriesWithoutLegacyVeto(t *testing.T) {
+	previous := globalPromptManager
+	globalPromptManager = NewPromptManager()
+	t.Cleanup(func() { globalPromptManager = previous })
+	if err := globalPromptManager.LoadTemplates("../prompts"); err != nil {
+		t.Fatal(err)
+	}
+	prompt := buildSystemPrompt(100, 3, 3, "default") + technicalAnalysisInstructions
+	for _, want := range []string{"策略 v4", "C. 已确认的局部反转", "D. 动量延续", "不要求三个周期同向", "≥1.2", "2:1", "1.25:1", "0.25", "30%"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("missing active rule %q", want)
+		}
+	}
+	for _, old := range []string{"3:1", "1:3", "若4小时已有明确反向趋势", "开仓建议≥75", "A或B满足一种即可"} {
+		if strings.Contains(prompt, old) {
+			t.Errorf("conflicting legacy rule %q", old)
+		}
+	}
+}

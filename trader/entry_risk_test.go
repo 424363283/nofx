@@ -27,3 +27,23 @@ func TestOpenEntryUsesCurrentPrice(t *testing.T) {
 		}
 	}
 }
+
+func TestActiveEntryRewardRiskAndCosts(t *testing.T) {
+	for _, tc := range []struct {
+		action       string
+		stop, target float64
+		allowed      bool
+	}{
+		{"open_long", 98, 104, true}, // Exactly 2:1, formerly blocked by 3:1.
+		{"open_short", 102, 96, true},
+		{"open_long", 98, 103.99, false},
+		{"open_short", 102, 96.01, false},
+		{"open_long", 99.8, 100.4, false}, // Gross 2:1 but costs consume the edge.
+		{"open_short", 100.2, 99.6, false},
+	} {
+		d := &decision.Decision{Action: tc.action, StopLoss: tc.stop, TakeProfit: tc.target, PositionSizeUSD: 20}
+		if err := validateOpenEntry(d, 100); (err == nil) != tc.allowed {
+			t.Errorf("%+v: %v", tc, err)
+		}
+	}
+}

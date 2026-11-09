@@ -13,6 +13,7 @@ import (
 
 // DecisionRecord 决策记录
 type DecisionRecord struct {
+	RawResponse    string             `json:"raw_response,omitempty"`
 	Timestamp      time.Time          `json:"timestamp"`       // 决策时间
 	CycleNumber    int                `json:"cycle_number"`    // 周期编号
 	SystemPrompt   string             `json:"system_prompt"`   // 系统提示词（发送给AI的系统prompt）

@@ -34,6 +34,7 @@ import type {
 } from '../types'
 import type { Language } from '../i18n/translations'
 import './design/dashboard.css'
+import { decisionErrorSummary } from '../lib/decisionError'
 import type { PositionStreamUpdate } from '../hooks/usePositionStream'
 interface Props {
   selectedTrader?: TraderInfo
@@ -111,7 +112,7 @@ function DecisionHistory({ records }: { records: DecisionRecord[] }) {
                 : `Run cycle #${r.cycle_number}; resets when the service restarts or the trader reloads. Records are ordered newest first.`}
             </Typography.Text>
             {r.error_message && (
-              <Alert type="error" showIcon title={r.error_message} />
+              <Alert type="error" showIcon title={decisionErrorSummary(r.error_message)} />
             )}
             <Table
               size="small"
@@ -179,6 +180,10 @@ function DecisionHistory({ records }: { records: DecisionRecord[] }) {
             <Collapse
               ghost
               items={[
+                ...(r.raw_response || (r.error_message && decisionErrorSummary(r.error_message) !== r.error_message)
+                  ? [{ key: 'raw-response', label: language === 'zh' ? '原始响应 / 错误详情' : 'Raw response / error details',
+                      children: <pre>{r.raw_response || r.error_message}</pre> }]
+                  : []),
                 ...(r.input_prompt
                   ? [
                       {

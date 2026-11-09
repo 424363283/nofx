@@ -18,15 +18,19 @@ func Get(symbol string) (*Data, error) {
 	// 标准化symbol
 	symbol = Normalize(symbol)
 	// 获取3分钟K线数据 (最近10个)
-	klines3m, err = WSMonitorCli.GetCurrentKlines(symbol, "3m") // 多获取一些用于计算
+	klines3m, err = getDecisionKlines(symbol, "3m", 3*time.Minute) // 多获取一些用于计算
 	if err != nil {
 		return nil, fmt.Errorf("获取3分钟K线失败: %v", err)
 	}
 
 	// 获取4小时K线数据 (最近10个)
-	klines4h, err = WSMonitorCli.GetCurrentKlines(symbol, "4h") // 多获取用于计算指标
+	klines4h, err = getDecisionKlines(symbol, "4h", 4*time.Hour) // 多获取用于计算指标
 	if err != nil {
 		return nil, fmt.Errorf("获取4小时K线失败: %v", err)
+	}
+
+	if len(klines3m) == 0 || len(klines4h) == 0 {
+		return nil, fmt.Errorf("行情K线为空")
 	}
 
 	// 计算当前指标 (基于3分钟最新数据)
@@ -76,6 +80,7 @@ func Get(symbol string) (*Data, error) {
 
 	return &Data{
 		Symbol:            symbol,
+		Technical:         []TechnicalReport{AnalyzeTechnical(klines3m, "3m", 3*time.Minute, time.Now()), AnalyzeTechnical(klines4h, "4h", 4*time.Hour, time.Now())},
 		CurrentPrice:      currentPrice,
 		PriceChange1h:     priceChange1h,
 		PriceChange4h:     priceChange4h,
@@ -170,6 +175,9 @@ func calculateRSI(klines []Kline, period int) float64 {
 	}
 
 	if avgLoss == 0 {
+		if avgGain == 0 {
+			return 50
+		}
 		return 100
 	}
 
@@ -443,6 +451,7 @@ func Format(data *Data) string {
 		sb.WriteString("4小时已收盘历史不足50根：趋势数据不足，不得将缺失EMA当作0或明确反向趋势。\n")
 	}
 
+	sb.WriteString(formatTechnical(data.Technical))
 	return sb.String()
 }
 
