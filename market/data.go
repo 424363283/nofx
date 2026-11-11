@@ -78,9 +78,14 @@ func Get(symbol string) (*Data, error) {
 		longerTermData = calculateLongerTermData(closed4h)
 	}
 
+	technical15 := TechnicalReport{Interval: "15m", Unavailable: "15分钟行情获取失败"}
+	if bars, err := getDecisionKlines(symbol, "15m", 15*time.Minute); err == nil {
+		technical15 = AnalyzeTechnical(bars, "15m", 15*time.Minute, time.Now())
+	}
+
 	return &Data{
 		Symbol:            symbol,
-		Technical:         []TechnicalReport{AnalyzeTechnical(klines3m, "3m", 3*time.Minute, time.Now()), AnalyzeTechnical(klines4h, "4h", 4*time.Hour, time.Now())},
+		Technical:         []TechnicalReport{AnalyzeTechnical(klines3m, "3m", 3*time.Minute, time.Now()), technical15, AnalyzeTechnical(klines4h, "4h", 4*time.Hour, time.Now())},
 		CurrentPrice:      currentPrice,
 		PriceChange1h:     priceChange1h,
 		PriceChange4h:     priceChange4h,

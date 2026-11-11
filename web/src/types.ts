@@ -62,6 +62,7 @@ export interface TradingHistory {
 }
 
 export interface DecisionAction {
+  reasoning?: string
 	stop_loss?: number
 	take_profit?: number
 	protection_status?: 'pending' | 'confirmed' | 'failed' | 'rolled_back'
@@ -85,6 +86,10 @@ export interface AccountSnapshot {
 }
 
 export interface DecisionRecord {
+  decision_source?: 'ai' | 'indicator_fallback' | 'system_only' | 'hybrid'
+  system_analysis?: { symbol: string; regime: string; timeframe: string; long_score: number; short_score: number; setup: string; entry_reference: number; trigger: string; decision: { action: string; reasoning: string; stop_loss?: number; take_profit?: number } }[]
+  ai_decisions?: { symbol: string; action: string; reasoning: string }[]
+  fallback_reason?: string
   raw_response?: string
   timestamp: string
   cycle_number: number

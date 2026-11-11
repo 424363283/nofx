@@ -515,6 +515,10 @@ func (at *AutoTrader) runCycle() error {
 
 	// 即使有错误，也保存思维链、决策和输入prompt（用于debug）
 	if decision != nil {
+		record.SystemAnalysis, _ = json.Marshal(decision.SystemAnalysis)
+		record.AIDecisions, _ = json.Marshal(decision.AIDecisions)
+		record.DecisionSource = decision.DecisionSource
+		record.FallbackReason = decision.FallbackReason
 		record.RawResponse = decision.RawResponse
 		record.SystemPrompt = decision.SystemPrompt // 保存系统提示词
 		record.InputPrompt = decision.UserPrompt
@@ -591,6 +595,7 @@ func (at *AutoTrader) runCycle() error {
 	for _, d := range sortedDecisions {
 		actionRecord := logger.DecisionAction{
 			Action:    d.Action,
+			Reasoning: d.Reasoning,
 			Symbol:    d.Symbol,
 			Quantity:  0,
 			Leverage:  d.Leverage,

@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { t } from '../i18n/translations'
 import HeaderBar from './landing/HeaderBar'
+import { AUTH_EXPIRED_NOTICE } from '../lib/authFetch'
 
 export function LoginPage() {
   const { language, setLanguage } = useLanguage()
@@ -14,7 +15,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [otpCode, setOtpCode] = useState('')
   const [userID, setUserID] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => sessionStorage.getItem(AUTH_EXPIRED_NOTICE)
+    ? '登录已失效，请重新登录。已有模型、交易账户和策略配置仍会保留。'
+    : '')
   const [loading, setLoading] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
   const adminMode = false

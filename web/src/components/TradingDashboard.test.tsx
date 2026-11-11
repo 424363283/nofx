@@ -107,3 +107,41 @@ for (const equity of [80, 120]) {
     expect(screen.getByText(`Change ${equity > 100 ? '+' : ''}${(equity - 100).toFixed(2)}% · Baseline 100.00 USDT`)).toBeTruthy()
   })
 }
+it('labels indicator fallback separately from AI errors and displays rule evidence', () => {
+  const record: DecisionRecord = {
+    timestamp: '2026-11-10T12:24:22+08:00', cycle_number: 1,
+    decision_source: 'indicator_fallback', fallback_reason: 'AI不可用：402 Insufficient Balance',
+    input_prompt: '', cot_trace: '', decision_json: '',
+    account_state: { total_balance: 100, available_balance: 100, total_unrealized_profit: 0, position_count: 0, margin_used_pct: 0 },
+    positions: [], candidate_coins: ['BTCUSDT'], execution_log: [], success: true,
+    decisions: [{ action: 'wait', symbol: 'BTCUSDT', quantity: 0, leverage: 0, price: 0, timestamp: '2026-11-10T12:24:22+08:00', success: true, reasoning: '指标备用：成交额比低于1.0' }],
+  }
+  const { container } = render(<TradingDashboard selectedTrader={{ trader_id: 'demo', trader_name: 'Demo', ai_model: 'deepseek' }} onTraderSelect={vi.fn()} language="zh" lastUpdate="12:24" decisions={[record]} />)
+  fireEvent.click(screen.getByRole('button', { name: /查看决策记录/ }))
+  fireEvent.click(container.querySelector('.decision-heading strong')!)
+  expect(screen.getByText('指标备用模式（非 AI 决策）')).toBeTruthy()
+  expect(screen.getByText('指标备用：成交额比低于1.0')).toBeTruthy()
+  expect(screen.queryByText('执行失败')).toBeNull()
+})
+
+it('shows independent system assessment and AI review separately', () => {
+  const record: DecisionRecord = {
+    timestamp: '2026-11-10T12:24:22+08:00', cycle_number: 1,
+    decision_source: 'hybrid',
+    system_analysis: [{ symbol: 'BTCUSDT', regime: '上涨趋势', timeframe: '15m', long_score: 90, short_score: 15, setup: '回踩再启动', entry_reference: 100, trigger: '', decision: { action: 'open_long', reasoning: '系统结构确认', stop_loss: 99, take_profit: 103 } }],
+    ai_decisions: [{ symbol: 'BTCUSDT', action: 'wait', reasoning: 'AI认为空间不足' }],
+    input_prompt: '', cot_trace: '', decision_json: '',
+    account_state: { total_balance: 100, available_balance: 100, total_unrealized_profit: 0, position_count: 0, margin_used_pct: 0 },
+    positions: [], candidate_coins: ['BTCUSDT'], execution_log: [], success: true,
+    decisions: [{ action: 'wait', symbol: 'BTCUSDT', quantity: 0, leverage: 0, price: 0, timestamp: '2026-11-10T12:24:22+08:00', success: true, reasoning: '指标备用：成交额比低于1.0' }],
+  }
+  const { container } = render(<TradingDashboard selectedTrader={{ trader_id: 'demo', trader_name: 'Demo', ai_model: 'deepseek' }} onTraderSelect={vi.fn()} language="zh" lastUpdate="12:24" decisions={[record]} />)
+  fireEvent.click(screen.getByRole('button', { name: /查看决策记录/ }))
+  fireEvent.click(container.querySelector('.decision-heading strong')!)
+  expect(screen.getByText('系统自主判断 + AI 复核')).toBeTruthy()
+  expect(screen.getByText('上涨趋势 / 15m')).toBeTruthy()
+  expect(screen.getByText('90 / 15')).toBeTruthy()
+  expect(screen.getByText('AI认为空间不足')).toBeTruthy()
+  expect(screen.getByText('指标备用：成交额比低于1.0')).toBeTruthy()
+  expect(screen.queryByText('执行失败')).toBeNull()
+})

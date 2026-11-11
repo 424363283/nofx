@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { getSystemConfig } from '../lib/config'
+import { AUTH_EXPIRED_EVENT, AUTH_EXPIRED_NOTICE } from '../lib/authFetch'
 
 interface User {
   id: string
@@ -56,6 +57,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const onExpired = () => {
+      setUser(null)
+      setToken(null)
+      window.history.replaceState({}, '', '/login')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
+  }, [])
 
   useEffect(() => {
     // 先检查是否为管理员模式（使用带缓存的系统配置获取）
@@ -129,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: data.user_id || 'admin',
           email: data.email || 'admin@localhost',
         }
+        sessionStorage.removeItem(AUTH_EXPIRED_NOTICE)
         setToken(data.token)
         setUser(userInfo)
         localStorage.setItem('auth_token', data.token)
@@ -201,6 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         // 登录成功，保存token和用户信息
         const userInfo = { id: data.user_id, email: data.email }
+        sessionStorage.removeItem(AUTH_EXPIRED_NOTICE)
         setToken(data.token)
         setUser(userInfo)
         localStorage.setItem('auth_token', data.token)
@@ -234,6 +248,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         // 注册完成，自动登录
         const userInfo = { id: data.user_id, email: data.email }
+        sessionStorage.removeItem(AUTH_EXPIRED_NOTICE)
         setToken(data.token)
         setUser(userInfo)
         localStorage.setItem('auth_token', data.token)

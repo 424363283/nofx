@@ -108,12 +108,16 @@ type Decision struct {
 
 // FullDecision AI的完整决策（包含思维链）
 type FullDecision struct {
-	RawResponse  string     `json:"raw_response,omitempty"`
-	SystemPrompt string     `json:"system_prompt"` // 系统提示词（发送给AI的系统prompt）
-	UserPrompt   string     `json:"user_prompt"`   // 发送给AI的输入prompt
-	CoTTrace     string     `json:"cot_trace"`     // 思维链分析（AI输出）
-	Decisions    []Decision `json:"decisions"`     // 具体决策列表
-	Timestamp    time.Time  `json:"timestamp"`
+	SystemAnalysis []SystemAssessment `json:"system_analysis,omitempty"`
+	AIDecisions    []Decision         `json:"ai_decisions,omitempty"`
+	DecisionSource string             `json:"decision_source,omitempty"`
+	FallbackReason string             `json:"fallback_reason,omitempty"`
+	RawResponse    string             `json:"raw_response,omitempty"`
+	SystemPrompt   string             `json:"system_prompt"` // 系统提示词（发送给AI的系统prompt）
+	UserPrompt     string             `json:"user_prompt"`   // 发送给AI的输入prompt
+	CoTTrace       string             `json:"cot_trace"`     // 思维链分析（AI输出）
+	Decisions      []Decision         `json:"decisions"`     // 具体决策列表
+	Timestamp      time.Time          `json:"timestamp"`
 }
 
 // GetFullDecision 获取AI的完整交易决策（批量分析所有币种和持仓）
@@ -134,25 +138,7 @@ func GetFullDecisionWithCustomPrompt(ctx *Context, mcpClient *mcp.Client, custom
 	systemPrompt += technicalAnalysisInstructions
 	userPrompt := buildUserPrompt(ctx)
 
-	// 3. 调用AI API（使用 system + user prompt）
-	aiResponse, err := mcpClient.CallWithMessages(systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("调用AI API失败: %w", err)
-	}
-
-	// 4. 解析AI响应
-	decision, err := parseFullDecisionResponse(aiResponse, ctx.Account.TotalEquity, ctx.BTCETHLeverage, ctx.AltcoinLeverage)
-	if decision != nil {
-		decision.Timestamp = time.Now()
-		decision.SystemPrompt = systemPrompt
-		decision.UserPrompt = userPrompt
-		decision.RawResponse = aiResponse
-	}
-	if err != nil {
-		return decision, fmt.Errorf("解析AI响应失败: %w", err)
-	}
-
-	return decision, nil
+	return ResolveModelDecision(ctx, systemPrompt, userPrompt, mcpClient.CallWithMessages, time.Now)
 }
 
 // fetchMarketDataForContext 为上下文中的所有币种获取市场数据和OI数据

@@ -111,6 +111,35 @@ function DecisionHistory({ records }: { records: DecisionRecord[] }) {
                 ? `运行内周期 #${r.cycle_number}；服务重启或重新加载交易员后从1计数，列表按决策时间倒序排列。`
                 : `Run cycle #${r.cycle_number}; resets when the service restarts or the trader reloads. Records are ordered newest first.`}
             </Typography.Text>
+            {r.decision_source === 'indicator_fallback' && (
+              <Alert type="warning" showIcon title="指标备用模式（非 AI 决策）" description={decisionErrorSummary(r.fallback_reason || 'AI 不可用，本轮由指标规则判断；原有执行风控继续生效。')} />
+            )}
+            {(r.decision_source === 'system_only' || r.decision_source === 'hybrid') && (
+              <Alert type={r.decision_source === 'hybrid' ? 'info' : 'warning'} showIcon
+                title={r.decision_source === 'hybrid' ? '系统自主判断 + AI 复核' : '系统自主判断（AI 不可用）'}
+                description={r.fallback_reason ? decisionErrorSummary(r.fallback_reason) : '系统先判断行情和多空机会，AI参与复核，最终执行仍须通过风控。'} />
+            )}
+            {!!r.system_analysis?.length && (
+              <Table size="small" rowKey="symbol" pagination={false} scroll={{ x: 1000 }}
+                dataSource={r.system_analysis}
+                columns={[
+                  { title: '系统分析', dataIndex: 'symbol' },
+                  { title: '行情 / 周期', render: (_, a) => `${a.regime} / ${a.timeframe || '—'}` },
+                  { title: '多 / 空规则分（非胜率）', render: (_, a) => `${a.long_score} / ${a.short_score}` },
+                  { title: '形态', dataIndex: 'setup' },
+                  { title: '参考价', render: (_, a) => a.entry_reference > 0 ? formatPrice(a.entry_reference) : '—' },
+                  { title: '止损 / 目标', render: (_, a) => `${a.decision.stop_loss ? formatPrice(a.decision.stop_loss) : '—'} / ${a.decision.take_profit ? formatPrice(a.decision.take_profit) : '—'}` },
+                  { title: '系统结论 / 原因', render: (_, a) => `${actionNames[a.decision.action] || a.decision.action}：${a.decision.reasoning}` },
+                ]} />
+            )}
+            {!!r.ai_decisions?.length && (
+              <Table size="small" rowKey={(_, i) => String(i)} pagination={false} dataSource={r.ai_decisions}
+                columns={[
+                  { title: 'AI复核标的', dataIndex: 'symbol' },
+                  { title: 'AI意见', dataIndex: 'action', render: (v) => actionNames[v] || v },
+                  { title: '依据', dataIndex: 'reasoning' },
+                ]} />
+            )}
             {r.error_message && (
               <Alert type="error" showIcon title={decisionErrorSummary(r.error_message)} />
             )}
@@ -168,7 +197,7 @@ function DecisionHistory({ records }: { records: DecisionRecord[] }) {
                     />
                   ),
                 },
-                { title: uiText('说明', language), dataIndex: 'error' },
+                { title: uiText('说明', language), key: 'reason', render: (_, row) => row.error || row.reasoning || '—' },
               ]}
             />
             <Typography.Text type="secondary">

@@ -13,6 +13,10 @@ import (
 
 // DecisionRecord 决策记录
 type DecisionRecord struct {
+	SystemAnalysis json.RawMessage    `json:"system_analysis,omitempty"`
+	AIDecisions    json.RawMessage    `json:"ai_decisions,omitempty"`
+	DecisionSource string             `json:"decision_source,omitempty"`
+	FallbackReason string             `json:"fallback_reason,omitempty"`
 	RawResponse    string             `json:"raw_response,omitempty"`
 	Timestamp      time.Time          `json:"timestamp"`       // 决策时间
 	CycleNumber    int                `json:"cycle_number"`    // 周期编号
@@ -52,6 +56,7 @@ type PositionSnapshot struct {
 
 // DecisionAction 决策动作
 type DecisionAction struct {
+	Reasoning        string    `json:"reasoning,omitempty"`
 	StopLoss         float64   `json:"stop_loss,omitempty"`
 	TakeProfit       float64   `json:"take_profit,omitempty"`
 	ProtectionStatus string    `json:"protection_status,omitempty"`

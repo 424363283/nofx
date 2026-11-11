@@ -1,3 +1,4 @@
+import { authFetch as fetch } from './authFetch'
 import type {
   SystemStatus,
   AccountInfo,
